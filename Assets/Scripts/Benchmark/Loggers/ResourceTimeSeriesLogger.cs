@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Text;
 using UnityEngine;
@@ -7,7 +8,8 @@ namespace Benchmark.Loggers
 {
     /// <summary>
     /// Periodically samples resource/inventory state and writes resource_timeseries.csv.
-    /// Also samples at each LLM decision.
+    /// Skips duplicate periodic samples when nothing has changed.
+    /// Always writes at LLM decisions regardless.
     /// </summary>
     public class ResourceTimeSeriesLogger
     {
@@ -17,6 +19,9 @@ namespace Benchmark.Loggers
         private readonly int _flushThreshold;
         private readonly List<string> _buffer = new();
         private long _lastSampleTick = -1;
+
+        // Change detection for periodic samples
+        private string _lastPeriodicHash = "";
 
         public ResourceTimeSeriesLogger(string outputDir, int flushThreshold)
         {
@@ -31,16 +36,16 @@ namespace Benchmark.Loggers
             if ((currentTick - _lastSampleTick) < intervalTicks && _lastSampleTick >= 0) return;
 
             _lastSampleTick = currentTick;
-            WriteSample(currentTick, "periodic");
+            WriteSample(currentTick, "periodic", skipIfUnchanged: true);
         }
 
-        /// <summary>Captures a snapshot triggered by an LLM decision.</summary>
+        /// <summary>Captures a snapshot triggered by an LLM decision (always written).</summary>
         public void LogAtDecision(long simTick)
         {
-            WriteSample(simTick, "llm_decision");
+            WriteSample(simTick, "llm_decision", skipIfUnchanged: false);
         }
 
-        private void WriteSample(long tick, string trigger)
+        private void WriteSample(long tick, string trigger, bool skipIfUnchanged)
         {
             var vs = VillageState.Instance;
             if (vs == null) return;
@@ -50,7 +55,17 @@ namespace Benchmark.Loggers
             foreach (var b in buildings)
                 if (b != null && b.IsFinished()) buildingCount++;
 
-            _buffer.Add($"{tick},{trigger},{vs.Wood},{vs.Stone},{vs.Seeds},{vs.Food},{vs.InventoryCapacity},{vs.Villagers.Count},{buildingCount}");
+            string hash = $"{vs.Wood}:{vs.Stone}:{vs.Seeds}:{vs.Food}:{vs.InventoryCapacity}:{vs.Villagers.Count}:{buildingCount}";
+
+            if (skipIfUnchanged && hash == _lastPeriodicHash)
+                return;
+
+            _lastPeriodicHash = hash;
+
+            _buffer.Add(string.Format(CultureInfo.InvariantCulture,
+                "{0},{1},{2},{3},{4},{5},{6},{7},{8}",
+                tick, trigger, vs.Wood, vs.Stone, vs.Seeds, vs.Food,
+                vs.InventoryCapacity, vs.Villagers.Count, buildingCount));
 
             if (_buffer.Count >= _flushThreshold)
                 Flush();

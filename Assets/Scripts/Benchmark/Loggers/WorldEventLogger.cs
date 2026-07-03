@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Text;
 using UnityEngine;
@@ -45,22 +46,25 @@ namespace Benchmark.Loggers
         {
             if (node == null) return;
             var pos = node.transform.position;
-            LogEvent("resource_exhausted",
-                $"{{\"resourceType\":\"{node.resourceType}\",\"x\":{pos.x:F1},\"z\":{pos.z:F1},\"isMineShaft\":{(node.isMineShaft ? "true" : "false")}}}");
+            LogEvent("resource_exhausted", string.Format(CultureInfo.InvariantCulture,
+                "{{\"resourceType\":\"{0}\",\"x\":{1:F1},\"z\":{2:F1},\"isMineShaft\":{3}}}",
+                node.resourceType, pos.x, pos.z, node.isMineShaft ? "true" : "false"));
         }
 
         public void OnNodeRegrown(Environment.Resources.ResourceNode node)
         {
             if (node == null) return;
             var pos = node.transform.position;
-            LogEvent("resource_regrown",
-                $"{{\"resourceType\":\"{node.resourceType}\",\"x\":{pos.x:F1},\"z\":{pos.z:F1}}}");
+            LogEvent("resource_regrown", string.Format(CultureInfo.InvariantCulture,
+                "{{\"resourceType\":\"{0}\",\"x\":{1:F1},\"z\":{2:F1}}}",
+                node.resourceType, pos.x, pos.z));
         }
 
         public void OnGoalCompleted(GlobalGoal goal)
         {
-            LogEvent("goal_completed",
-                $"{{\"description\":\"{EscapeJson(goal.Description)}\",\"completionTime\":{goal.completionTime:F1}}}");
+            LogEvent("goal_completed", string.Format(CultureInfo.InvariantCulture,
+                "{{\"description\":\"{0}\",\"completionTime\":{1:F1}}}",
+                EscapeJson(goal.Description), goal.completionTime));
         }
 
         public void OnAllGoalsCompleted()
@@ -82,8 +86,8 @@ namespace Benchmark.Loggers
             // Build JSONL line manually for nested JSON in details
             _buffer.Add($"{{\"simTick\":{entry.simTick},\"eventType\":\"{entry.eventType}\",\"details\":{entry.details}}}");
 
-            if (_buffer.Count >= _flushThreshold)
-                Flush();
+            // World events are rare — flush immediately so data is never lost
+            Flush();
         }
 
         public void Flush()

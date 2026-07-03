@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Text;
 using UnityEngine;
@@ -8,6 +9,7 @@ namespace Benchmark.Loggers
 {
     /// <summary>
     /// Periodically samples all villagers and writes villager_timeseries.csv.
+    /// Skips duplicate samples when all villagers are idle and unchanged.
     /// </summary>
     public class VillagerTimeSeriesLogger
     {
@@ -18,6 +20,9 @@ namespace Benchmark.Loggers
         private readonly List<string> _buffer = new();
         private long _lastSampleTick = -1;
 
+        // Change detection: skip samples when nothing has changed
+        private string _lastSampleHash = "";
+
         public VillagerTimeSeriesLogger(string outputDir, int flushThreshold)
         {
             _filePath = Path.Combine(outputDir, "villager_timeseries.csv");
@@ -25,10 +30,6 @@ namespace Benchmark.Loggers
             File.WriteAllText(_filePath, Header + "\n");
         }
 
-        /// <summary>
-        /// Checks if a sample is due and captures villager data.
-        /// Called every frame from BenchmarkLogger.Update().
-        /// </summary>
         public void SampleIfDue(long currentTick, int intervalTicks)
         {
             if (currentTick <= _lastSampleTick) return;
@@ -41,6 +42,10 @@ namespace Benchmark.Loggers
         private void Sample(long tick)
         {
             if (VillageState.Instance == null) return;
+
+            // Build rows and a hash to detect changes
+            var rows = new List<string>();
+            var hashBuilder = new StringBuilder();
 
             foreach (var v in VillageState.Instance.Villagers)
             {
@@ -69,8 +74,25 @@ namespace Benchmark.Loggers
                     }
                 }
 
-                _buffer.Add($"{tick},{v.VillagerId},{CsvEscape(v.villagerName)},{pos.x:F1},{pos.z:F1},{gridPos.x},{gridPos.y},{CsvEscape(jobName)},{v.EnergyPercent},{status}");
+                // Use InvariantCulture to avoid comma-as-decimal-separator on German locale
+                string row = string.Format(CultureInfo.InvariantCulture,
+                    "{0},{1},{2},{3:F1},{4:F1},{5},{6},{7},{8},{9}",
+                    tick, v.VillagerId, CsvEscape(v.villagerName),
+                    pos.x, pos.z, gridPos.x, gridPos.y,
+                    CsvEscape(jobName), v.EnergyPercent, status);
+
+                rows.Add(row);
+
+                // Hash uses job + grid position + energy (not tick) to detect actual changes
+                hashBuilder.Append($"{v.VillagerId}:{jobName}:{gridPos.x},{gridPos.y}:{v.EnergyPercent}:{status}|");
             }
+
+            string currentHash = hashBuilder.ToString();
+            if (currentHash == _lastSampleHash)
+                return; // Nothing changed — skip this sample
+
+            _lastSampleHash = currentHash;
+            _buffer.AddRange(rows);
 
             if (_buffer.Count >= _flushThreshold)
                 Flush();

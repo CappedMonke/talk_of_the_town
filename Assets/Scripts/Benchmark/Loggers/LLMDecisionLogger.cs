@@ -79,8 +79,8 @@ namespace Benchmark.Loggers
 
             _buffer.Add(JsonUtility.ToJson(entry));
 
-            if (_buffer.Count >= _flushThreshold)
-                Flush();
+            // LLM decisions are rare — flush immediately so data is never lost
+            Flush();
         }
 
         public void Flush()

@@ -117,6 +117,9 @@ namespace Benchmark
                 StartBenchmark();
         }
 
+        // Idle detection
+        private bool _waitingForDecision;
+
         void Update()
         {
             if (!_isRunning || _currentRun == null) return;
@@ -126,7 +129,55 @@ namespace Benchmark
             {
                 Debug.Log($"[BenchmarkRunner] Cutoff reached at tick {SimTickTracker.CurrentTick}");
                 CompleteCurrentRun("cutoff");
+                return;
             }
+
+            // When all villagers are idle and we're running at speed, pause and force a new LLM decision
+            if (!_waitingForDecision && Time.timeScale > 0f && AllVillagersIdle())
+            {
+                _waitingForDecision = true;
+                VillageState.Instance?.SetGameSpeed(0f);
+
+                if (LLMController.Instance != null)
+                {
+                    LLMController.Instance.OnBatchDecisionMade += OnDecisionResumesSpeed;
+                    LLMController.Instance.RequestImmediateBatchDecision();
+                }
+            }
+        }
+
+        private void OnDecisionResumesSpeed(Dictionary<string, JobDecision> _)
+        {
+            if (LLMController.Instance != null)
+                LLMController.Instance.OnBatchDecisionMade -= OnDecisionResumesSpeed;
+
+            _waitingForDecision = false;
+
+            if (_isRunning && VillageState.Instance != null)
+                VillageState.Instance.SetGameSpeed(benchmarkGameSpeed);
+        }
+
+        private bool AllVillagersIdle()
+        {
+            if (VillageState.Instance == null) return false;
+            var villagers = VillageState.Instance.Villagers;
+            if (villagers.Count == 0) return false;
+
+            foreach (var v in villagers)
+            {
+                if (v == null) continue;
+
+                // Villager has an active job — not idle
+                var jh = v.GetComponent<JobHandler>();
+                if (jh != null && jh.currentJob != null && jh.ActiveJobLogic != null)
+                    return false;
+
+                // Villager is intentionally resting (LLM told them to rest until X% energy) — not idle
+                var brain = v.GetComponent<VillagerBrain>();
+                if (brain != null && brain.IsResting)
+                    return false;
+            }
+            return true;
         }
 
         // ── Public API ──────────────────────────────────────────────────
@@ -344,14 +395,30 @@ namespace Benchmark
             if (mainMenu != null)
                 mainMenu.OnStartPressed();
 
-            // Set game speed
+            // Start paused — speed 0 until first LLM decision arrives
             yield return null; // Wait a frame for VillageState to exist
             if (VillageState.Instance != null)
-                VillageState.Instance.SetGameSpeed(benchmarkGameSpeed);
+                VillageState.Instance.SetGameSpeed(0f);
+
+            // Set benchmark speed after first LLM decision
+            if (LLMController.Instance != null)
+                LLMController.Instance.OnBatchDecisionMade += OnFirstDecisionSetSpeed;
 
             _isRunning = true;
             _runStartRealTime = Time.realtimeSinceStartup;
-            Debug.Log($"[BenchmarkRunner] Run {_currentRun.runId} started at tick {SimTickTracker.CurrentTick}");
+            Debug.Log($"[BenchmarkRunner] Run {_currentRun.runId} started (paused until first LLM decision)");
+        }
+
+        private void OnFirstDecisionSetSpeed(Dictionary<string, JobDecision> _)
+        {
+            // Unsubscribe immediately — only fires once
+            if (LLMController.Instance != null)
+                LLMController.Instance.OnBatchDecisionMade -= OnFirstDecisionSetSpeed;
+
+            if (VillageState.Instance != null)
+                VillageState.Instance.SetGameSpeed(benchmarkGameSpeed);
+
+            Debug.Log($"[BenchmarkRunner] First LLM decision received — setting speed to {benchmarkGameSpeed}x");
         }
 
         private void OnAllGoalsCompleted()
@@ -366,6 +433,12 @@ namespace Benchmark
             _isRunning = false;
 
             // Unsubscribe
+            _waitingForDecision = false;
+            if (LLMController.Instance != null)
+            {
+                LLMController.Instance.OnBatchDecisionMade -= OnFirstDecisionSetSpeed;
+                LLMController.Instance.OnBatchDecisionMade -= OnDecisionResumesSpeed;
+            }
             if (GlobalGoals.Instance != null)
                 GlobalGoals.Instance.OnAllGlobalGoalsCompleted -= OnAllGoalsCompleted;
 

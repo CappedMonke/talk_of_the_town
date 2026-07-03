@@ -34,6 +34,7 @@ public class VillagerBrain : MonoBehaviour
     private float _lastAppliedDecisionTime;
     private bool _waitingForBatch;
     private int _restUntilEnergy; // 0 = no target; >0 = wait until villager reaches this % before requesting
+    public bool IsResting => _restUntilEnergy > 0;
 
     // Mini-goal tracking
     private int _gatherGoalAmount;
