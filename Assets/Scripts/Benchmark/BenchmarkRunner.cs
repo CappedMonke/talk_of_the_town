@@ -172,9 +172,11 @@ namespace Benchmark
                 if (jh != null && jh.currentJob != null && jh.ActiveJobLogic != null)
                     return false;
 
-                // Villager is intentionally resting (LLM told them to rest until X% energy) — not idle
+                // Villager is resting: either LLM-set rest target or exhausted (energy < 5%)
                 var brain = v.GetComponent<VillagerBrain>();
                 if (brain != null && brain.IsResting)
+                    return false;
+                if (v.EnergyPercent < 5)
                     return false;
             }
             return true;

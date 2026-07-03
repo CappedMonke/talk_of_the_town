@@ -18,6 +18,12 @@ namespace ollama
         public int keep_alive;
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public int? num_ctx;
+        /// <summary>
+        /// Controls reasoning/thinking for models that support it (e.g. gpt-oss).
+        /// null = model default, false = disable, "low"/"medium"/"high" for effort levels.
+        /// </summary>
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public object think;
     }
 
     [Serializable]
@@ -143,7 +149,8 @@ namespace ollama
             string prompt,
             int keep_alive = 300,
             int num_ctx = 0,
-            Texture2D image = null)
+            Texture2D image = null,
+            object think = null)
         {
             try
             {
@@ -162,7 +169,8 @@ namespace ollama
                     messages = new List<SimpleChatMessage> { message },
                     stream = false,
                     keep_alive = keep_alive,
-                    num_ctx = num_ctx > 0 ? num_ctx : (int?)null
+                    num_ctx = num_ctx > 0 ? num_ctx : (int?)null,
+                    think = think
                 };
 
                 string payload = JsonConvert.SerializeObject(request);
@@ -202,7 +210,7 @@ namespace ollama
                     using (var reader = new StreamReader(errorStream))
                         errorResponse = await reader.ReadToEndAsync();
                 }
-                
+
                 Debug.LogError($"[OllamaExt] HTTP Error: {webEx.Message}\n{errorResponse}");
                 return CreateErrorResponse(webEx.Message);
             }
@@ -220,7 +228,8 @@ namespace ollama
             ConversationHistory history,
             int keep_alive = 300,
             int num_ctx = 0,
-            Texture2D image = null)
+            Texture2D image = null,
+            object think = null)
         {
             try
             {
@@ -243,7 +252,8 @@ namespace ollama
                     messages = messages,
                     stream = false,
                     keep_alive = keep_alive,
-                    num_ctx = num_ctx > 0 ? num_ctx : (int?)null
+                    num_ctx = num_ctx > 0 ? num_ctx : (int?)null,
+                    think = think
                 };
 
                 string payload = JsonConvert.SerializeObject(request);

@@ -46,25 +46,27 @@ namespace Benchmark.Loggers
         {
             if (node == null) return;
             var pos = node.transform.position;
-            LogEvent("resource_exhausted", string.Format(CultureInfo.InvariantCulture,
-                "{{\"resourceType\":\"{0}\",\"x\":{1:F1},\"z\":{2:F1},\"isMineShaft\":{3}}}",
-                node.resourceType, pos.x, pos.z, node.isMineShaft ? "true" : "false"));
+            var x = pos.x.ToString("F1", CultureInfo.InvariantCulture);
+            var z = pos.z.ToString("F1", CultureInfo.InvariantCulture);
+            LogEvent("resource_exhausted",
+                $"{{\"resourceType\":\"{node.resourceType}\",\"x\":{x},\"z\":{z},\"isMineShaft\":{(node.isMineShaft ? "true" : "false")}}}");
         }
 
         public void OnNodeRegrown(Environment.Resources.ResourceNode node)
         {
             if (node == null) return;
             var pos = node.transform.position;
-            LogEvent("resource_regrown", string.Format(CultureInfo.InvariantCulture,
-                "{{\"resourceType\":\"{0}\",\"x\":{1:F1},\"z\":{2:F1}}}",
-                node.resourceType, pos.x, pos.z));
+            var x = pos.x.ToString("F1", CultureInfo.InvariantCulture);
+            var z = pos.z.ToString("F1", CultureInfo.InvariantCulture);
+            LogEvent("resource_regrown",
+                $"{{\"resourceType\":\"{node.resourceType}\",\"x\":{x},\"z\":{z}}}");
         }
 
         public void OnGoalCompleted(GlobalGoal goal)
         {
-            LogEvent("goal_completed", string.Format(CultureInfo.InvariantCulture,
-                "{{\"description\":\"{0}\",\"completionTime\":{1:F1}}}",
-                EscapeJson(goal.Description), goal.completionTime));
+            var time = goal.completionTime.ToString("F1", CultureInfo.InvariantCulture);
+            LogEvent("goal_completed",
+                $"{{\"description\":\"{EscapeJson(goal.Description)}\",\"completionTime\":{time}}}");
         }
 
         public void OnAllGoalsCompleted()

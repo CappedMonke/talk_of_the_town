@@ -22,6 +22,7 @@ namespace Benchmark
 
         private string _runOutputDir;
         private bool _isLogging;
+        private bool _subscribedToLLM;
 
         // Sub-loggers
         private RunMetadataLogger _metadataLogger;
@@ -59,8 +60,8 @@ namespace Benchmark
             _worldEventLogger = new WorldEventLogger(_runOutputDir, flushThreshold);
 
             // Subscribe to LLM decisions
-            if (LLMController.Instance != null)
-                LLMController.Instance.OnBatchDecisionLogged += OnBatchDecisionLogged;
+            _subscribedToLLM = false;
+            TrySubscribeToLLM();
 
             // Subscribe to world events
             Buildings.Building.OnBuildingPlaced += _worldEventLogger.OnBuildingPlaced;
@@ -85,11 +86,25 @@ namespace Benchmark
         {
             if (!_isLogging) return;
 
+            // Retry LLM subscription if it wasn't ready at BeginRun time
+            if (!_subscribedToLLM)
+                TrySubscribeToLLM();
+
             long currentTick = SimTickTracker.CurrentTick;
 
             // Periodic sampling
             _villagerLogger?.SampleIfDue(currentTick, sampleIntervalTicks);
             _resourceLogger?.SampleIfDue(currentTick, sampleIntervalTicks);
+        }
+
+        private void TrySubscribeToLLM()
+        {
+            if (_subscribedToLLM) return;
+            if (LLMController.Instance == null) return;
+
+            LLMController.Instance.OnBatchDecisionLogged += OnBatchDecisionLogged;
+            _subscribedToLLM = true;
+            Debug.Log("[BenchmarkLogger] Subscribed to LLMController.OnBatchDecisionLogged");
         }
 
         private void OnBatchDecisionLogged(BatchDecisionLog log)
@@ -107,8 +122,9 @@ namespace Benchmark
             _isLogging = false;
 
             // Unsubscribe events
-            if (LLMController.Instance != null)
+            if (LLMController.Instance != null && _subscribedToLLM)
                 LLMController.Instance.OnBatchDecisionLogged -= OnBatchDecisionLogged;
+            _subscribedToLLM = false;
 
             Buildings.Building.OnBuildingPlaced -= _worldEventLogger.OnBuildingPlaced;
             Buildings.Building.OnBuildingCompleted -= _worldEventLogger.OnBuildingCompleted;

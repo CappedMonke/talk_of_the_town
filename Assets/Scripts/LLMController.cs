@@ -25,7 +25,6 @@ public class LLMController : MonoBehaviour
 
     [Header("Prompt Settings")]
     [SerializeField] private int maxResourceLocationsToShow = 6;
-    [SerializeField] private bool includeThinkingPrompt = true;
 
     [Header("Batch Decision Settings")]
     [Tooltip("Fallback interval for batch decisions when no events fire (seconds)")]
@@ -41,6 +40,10 @@ public class LLMController : MonoBehaviour
     [Header("Context Settings")]
     [Tooltip("Context window size (tokens). 0 = use model default. Check your model's actual limit.")]
     [SerializeField] private int contextSize = 0;
+
+    [Header("Reasoning Control")]
+    [Tooltip("Controls reasoning/thinking for models that support it (e.g. gpt-oss).")]
+    [SerializeField] private ThinkMode thinkMode = ThinkMode.ModelDefault;
 
     [Header("Memory Settings")]
     [Tooltip("Number of past user/assistant message pairs to retain. 0 = stateless.")]
@@ -438,9 +441,18 @@ public class LLMController : MonoBehaviour
     {
         var energyRates = GetEnergyRates();
         bool caveman = GlobalSettings.Instance != null && GlobalSettings.Instance.UseCavemanPrompt;
-        return caveman
+        string prompt = caveman
             ? LLMPromptCaveman.BuildBatchSystemPrompt(availableJobs, villagerCount, energyRates)
             : LLMPromptNormal.BuildBatchSystemPrompt(availableJobs, villagerCount, energyRates);
+
+        // Inject reasoning level directive for models that read it from the system prompt (e.g. gpt-oss)
+        if (thinkMode != ThinkMode.ModelDefault)
+        {
+            string level = thinkMode == ThinkMode.Off ? "none" : thinkMode.ToString().ToLower();
+            prompt = $"Reasoning: {level}\n{prompt}";
+        }
+
+        return prompt;
     }
 
     private (float drain, float walkDrain, float recovery) GetEnergyRates()
@@ -880,9 +892,6 @@ public class LLMController : MonoBehaviour
             ? $"{context}\nAssign jobs and locations to ALL villagers:"
             : $"{systemPrompt}\n\n{context}\nAssign jobs and locations to ALL villagers:";
 
-        if (includeThinkingPrompt)
-            fullPrompt += "\n/think";
-        
         if (logFullPrompts) LogEvent($"Batch Prompt [{promptLabel}] for {villagers.Count} villagers:\n{fullPrompt} ");
         else LogEvent($"Batch Prompt [{promptLabel}] for {villagers.Count} villagers ({fullPrompt.Length} chars)");
 
@@ -901,9 +910,18 @@ public class LLMController : MonoBehaviour
         try
         {
             // Use the extension method to get full metadata
+            object thinkParam = thinkMode switch
+            {
+                ThinkMode.Off => false,
+                ThinkMode.Low => "low",
+                ThinkMode.Medium => "medium",
+                ThinkMode.High => "high",
+                _ => null // ModelDefault — let the model decide
+            };
+
             var chatResponse = useConversationMemory
-                ? await OllamaExtensions.ChatWithMetadataExt(defaultModel, fullPrompt, _conversation, keepAliveSeconds, contextSize)
-                : await OllamaExtensions.ChatWithMetadataExt(defaultModel, fullPrompt, keepAliveSeconds, contextSize);
+                ? await OllamaExtensions.ChatWithMetadataExt(defaultModel, fullPrompt, _conversation, keepAliveSeconds, contextSize, null, thinkParam)
+                : await OllamaExtensions.ChatWithMetadataExt(defaultModel, fullPrompt, keepAliveSeconds, contextSize, null, thinkParam);
             
             metrics.responseTime = (DateTime.Now - startTime).TotalSeconds;
             metrics.responseLength = chatResponse.content.Length;
@@ -1185,9 +1203,6 @@ public class LLMController : MonoBehaviour
         string context = BuildSingleContext(villager);
 
         string fullPrompt = $"{systemPrompt}\n\n{context}\nDecide job AND target for {villager.villagerName}:";
-
-        if (includeThinkingPrompt)
-            fullPrompt += "\n/think";
 
         if (logFullPrompts) LogVerbose($"Single Prompt:\n{fullPrompt}");
         else LogVerbose($"Single Prompt ({fullPrompt.Length} chars)");
@@ -1616,6 +1631,15 @@ Response Times:
             ClearMetricsHistory();
     }
 #endif
+}
+
+public enum ThinkMode
+{
+    ModelDefault,
+    Off,
+    Low,
+    Medium,
+    High
 }
 
 #region Data Classes
