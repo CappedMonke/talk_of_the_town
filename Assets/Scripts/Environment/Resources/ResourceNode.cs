@@ -1,9 +1,16 @@
+using System;
 using UnityEngine;
 
 namespace Environment.Resources
 {
     public class ResourceNode : MonoBehaviour
     {
+        /// <summary>Fired when a resource node is exhausted (harvested to depletion or set to regrow).</summary>
+        public static event Action<ResourceNode> OnNodeExhausted;
+
+        /// <summary>Fired when a regrowing resource reaches Mature stage.</summary>
+        public static event Action<ResourceNode> OnNodeRegrown;
+
         public enum ResourceType
         {
             Tree,
@@ -66,7 +73,10 @@ namespace Environment.Resources
                 if (growthStage == GrowthStage.Seedling)
                     growthStage = GrowthStage.Growing;
                 else if (growthStage == GrowthStage.Growing)
+                {
                     growthStage = GrowthStage.Mature;
+                    OnNodeRegrown?.Invoke(this);
+                }
 
                 UpdateVisuals();
             }
@@ -84,6 +94,8 @@ namespace Environment.Resources
                 isReserved = false;
                 return;
             }
+
+            OnNodeExhausted?.Invoke(this);
 
             if (canRegrow)
             {

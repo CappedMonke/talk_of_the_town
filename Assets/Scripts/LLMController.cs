@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using Benchmark;
 using Environment.Resources;
 using Tiles;
 using UnityEngine;
@@ -63,6 +64,7 @@ public class LLMController : MonoBehaviour
     public event Action<Dictionary<string, JobDecision>> OnBatchDecisionMade;
     public event Action<string> OnError;
     public event Action<LLMMetrics> OnMetricsRecorded;
+    public event Action<Benchmark.BatchDecisionLog> OnBatchDecisionLogged;
 
     private List<string> _availableModels = new List<string>();
     public IReadOnlyList<string> AvailableModels => _availableModels;
@@ -84,6 +86,7 @@ public class LLMController : MonoBehaviour
     private float _preLLMTimeScale;
     private bool _triggerPendingAfterBatch;
     private string _pendingTriggerReason;
+    private string _currentTriggerReason = "startup";
     private Dictionary<string, JobDecision> _latestBatchDecisions = new ();
     private float _lastBatchDecisionTime;
     private Coroutine _pendingDecisionCoroutine;
@@ -124,7 +127,6 @@ public class LLMController : MonoBehaviour
         if (Instance == null)
         {
             Instance = this;
-            DontDestroyOnLoad(gameObject);
             Initialize();
         }
         else
@@ -305,6 +307,7 @@ public class LLMController : MonoBehaviour
             _pendingTriggerReason = reason;
             yield break;
         }
+        _currentTriggerReason = reason;
         yield return RequestBatchDecisions();
     }
 
@@ -334,6 +337,7 @@ public class LLMController : MonoBehaviour
                 }
 
                 LogEvent($"Fallback interval triggered batch decision.");
+                _currentTriggerReason = "fallback_interval";
                 yield return RequestBatchDecisions();
             }
         }
@@ -855,6 +859,7 @@ public class LLMController : MonoBehaviour
         List<string> availableJobs)
     {
         var results = new Dictionary<string, JobDecision>();
+        string rawResponseText = null;
 
         if (!IsReady || villagers.Count == 0)
             return results;
@@ -914,6 +919,8 @@ public class LLMController : MonoBehaviour
             metrics.totalDuration = chatResponse.TotalSeconds;
             metrics.loadDuration = chatResponse.LoadSeconds;
             
+            rawResponseText = chatResponse.content;
+
             if (logFullPrompts) LogEvent($"Batch Response:\n{chatResponse.content}");
             else LogEvent($"Batch Response ({chatResponse.content.Length} chars)");
 
@@ -949,6 +956,48 @@ public class LLMController : MonoBehaviour
 
         // Record metrics
         RecordMetrics(metrics);
+
+        // Fire benchmark logging event with lightweight state snapshot
+        if (OnBatchDecisionLogged != null)
+        {
+            var vs = VillageState.Instance;
+            var inputState = new InputStateSnapshot
+            {
+                wood = vs != null ? vs.Wood : 0,
+                stone = vs != null ? vs.Stone : 0,
+                seeds = vs != null ? vs.Seeds : 0,
+                food = vs != null ? vs.Food : 0,
+                capacity = vs != null ? vs.InventoryCapacity : 0,
+                villagerCount = villagers.Count,
+                buildingCount = CountFinishedBuildings()
+            };
+
+            // Collect idle villager names
+            foreach (var v in villagers)
+            {
+                if (v == null) continue;
+                var jh = v.GetComponent<JobHandler>();
+                if (jh == null || jh.currentJob == null || jh.ActiveJobLogic == null)
+                    inputState.idleVillagers.Add(v.villagerName);
+            }
+
+            // Collect active global goal descriptions
+            if (GlobalGoals.Instance != null)
+            {
+                foreach (var g in GlobalGoals.Instance.Goals)
+                    inputState.activeGoals.Add(g.Description + (g.isCompleted ? " [DONE]" : ""));
+            }
+
+            OnBatchDecisionLogged.Invoke(new BatchDecisionLog
+            {
+                simTick = SimTickTracker.CurrentTick,
+                triggerReason = _currentTriggerReason,
+                inputState = inputState,
+                rawResponse = rawResponseText,
+                parsedDecisions = results,
+                metrics = metrics
+            });
+        }
 
         return results;
     }
@@ -1389,6 +1438,15 @@ Response Times:
     #endregion
 
     #region Resource Location Helpers
+
+    private int CountFinishedBuildings()
+    {
+        int count = 0;
+        var buildings = UnityEngine.Object.FindObjectsByType<Buildings.Building>(FindObjectsSortMode.None);
+        foreach (var b in buildings)
+            if (b != null && b.IsFinished()) count++;
+        return count;
+    }
 
     private int CountAllCrops()
     {

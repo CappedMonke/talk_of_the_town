@@ -29,7 +29,7 @@ namespace Tiles
         [SerializeField] TWCLayerMapper layerMapper;
         [SerializeField] NavMeshSurface navMeshSurface;
         [SerializeField] VillageSpawner villageSpawner;
-        [SerializeField] bool dontDestroyOnLoad = true;
+        [SerializeField] bool dontDestroyOnLoad = false;
         [Header("Overlay Detection")]
         [SerializeField] bool useBuildLayerFallback = true;
         [Tooltip("Parent transforms under which TWC instantiates overlay objects (enable 'group under parent' in TWC).")]
@@ -52,6 +52,9 @@ namespace Tiles
         /// (which fire asynchronously via coroutines) from overwriting loaded tile data.
         /// </summary>
         private bool _isLoadedFromFile = false;
+
+        /// <summary>Current map seed (from TileWorldCreator).</summary>
+        public int MapSeed => tileWorldCreator != null ? tileWorldCreator.currentSeed : 0;
         
         [System.Serializable]
         public class OverlayBuildRoot

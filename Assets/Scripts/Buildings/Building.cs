@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -21,6 +22,12 @@ namespace Buildings
 
     public class Building : MonoBehaviour
     {
+        /// <summary>Fired when a building is first placed in the scene.</summary>
+        public static event Action<Building> OnBuildingPlaced;
+
+        /// <summary>Fired when a building finishes all construction levels.</summary>
+        public static event Action<Building> OnBuildingCompleted;
+
         public BuildingData buildingData;
 
         /// <summary>
@@ -99,11 +106,15 @@ namespace Buildings
                 ShowFinalForLevel(finishedLevel);
                 ApplyLevelBonuses(finishedLevel);
 
-                if (IsFinished() && buildingData != null && buildingData.buildingType == BuildingType.House)
+                if (IsFinished())
                 {
-                    OccupySlot(); // Claim the slot immediately so GetAvailableHouseSlots() is accurate
-                    VillageState.Instance?.RegisterCompletedHouse(this);
-                    StartCoroutine(SpawnVillagerDelayed(buildingData.villagerSpawnDelay));
+                    if (buildingData != null && buildingData.buildingType == BuildingType.House)
+                    {
+                        OccupySlot(); // Claim the slot immediately so GetAvailableHouseSlots() is accurate
+                        VillageState.Instance?.RegisterCompletedHouse(this);
+                        StartCoroutine(SpawnVillagerDelayed(buildingData.villagerSpawnDelay));
+                    }
+                    OnBuildingCompleted?.Invoke(this);
                 }
             }
             UpdateVisuals();
@@ -128,6 +139,7 @@ namespace Buildings
 
             BuildRuntimeLevels();
             UpdateVisuals();
+            OnBuildingPlaced?.Invoke(this);
         }
 
         private void BuildRuntimeLevels()
