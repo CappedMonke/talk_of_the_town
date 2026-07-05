@@ -35,19 +35,19 @@ JOB DESCRIPTIONS:
 
 PRIORITY ORDER (follow this strictly):
 0. RESEARCHER GOALS FIRST: Always read the RESEARCHER GOALS section before deciding. Let those goals drive your strategy:
-   - Population goal → prioritize building Houses and spawning villagers above all else.
+   - Population goal → you NEED Houses (which cost food) → you NEED a Farm first (to produce food) → you NEED wood + stone + seeds. Plan the full chain!
    - Resource goal → prioritize gathering those specific resources; don't waste villagers on unrelated jobs.
-   - Do NOT build Farms or gather food just because seeds are available if the researcher goal doesn't need it.
-1. FARMING: If Seeds >= 10 AND food is not nearly full AND farming is not blocked (see inventory warnings), assign at least one villager as Farmer to keep food stable. EXCEPTIONS:
-   - If inventory shows ""FARMING BLOCKED"" or ""NEARLY FULL"" for food — do NOT assign more Farmers and do NOT build more Farms.
+1. BUILD ORDER FOR POPULATION: Farm → Farmer plants crops → harvest food → House → villager spawns. This chain is REQUIRED. If you have 0 Farms and 0 food, build a Farm FIRST (Farms do NOT cost food, only wood + stone). NEVER idle all villagers waiting for food when no Farm exists — that is a deadlock.
+2. FARMING: If a Farm exists AND Seeds >= 10 AND food is not nearly full, assign at least one villager as Farmer. EXCEPTIONS:
+   - If inventory shows ""FARMING BLOCKED"" or ""NEARLY FULL"" for food — do NOT assign more Farmers.
    - If the Researcher Goal is population, food is a support resource — keep 1 Farmer max, focus the rest on building Houses.
-2. BUILDING: If Wood >= 20 and Stone >= 10, consider assigning a Builder. Builders place AND construct buildings from scratch — no pre-existing foundation needed. Always specify ""buildingType"":
-   - House: build when free slots = 0 and more villagers are needed (especially if Researcher Goal is population).
+3. BUILDING: Builders place AND construct buildings from scratch — no pre-existing foundation needed. Always specify ""buildingType"":
+   - House: build when free slots = 0 and more villagers are needed. Requires food — ensure food supply exists first!
    - Stockpile: if inventory is approaching capacity OR if 2+ free house slots already exist.
-   - Farm: ONLY build if no farms exist at all (farmers are blocked without one), OR if food is genuinely low AND field capacity is the bottleneck. Do NOT build more Farms if food is high or the field limit warning says food is sufficient.
+   - Farm: build if no farms exist (farmers are blocked without one), OR if food is genuinely low AND field capacity is the bottleneck.
    DO NOT build more Houses if there are already 2+ free house slots waiting to fill up.
-3. GATHERING: Only gather resources that are actually low. If Wood > 50, no more Lumberjacks. If Seeds > 30, no more SeedGatherers — farm those seeds instead!
-4. AVOID OVER-PRODUCING: Do NOT keep building or gathering beyond what the Researcher Goals require. Switch to the job that moves the needle toward those goals.
+4. GATHERING: Only gather resources that are actually low. If Wood > 50, no more Lumberjacks. If Seeds > 30, no more SeedGatherers — farm those seeds instead!
+5. NEVER IDLE ALL VILLAGERS: There is ALWAYS something productive to do — gather more resources, build infrastructure, or prepare for the next step. Idling all villagers is a failure state.
 
 CRITICAL COORDINATION RULES:
 1. SPREAD VILLAGERS OUT: Each villager must go to a DIFFERENT location!

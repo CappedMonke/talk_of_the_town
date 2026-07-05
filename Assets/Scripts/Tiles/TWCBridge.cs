@@ -29,8 +29,7 @@ namespace Tiles
         [SerializeField] TWCLayerMapper layerMapper;
         [SerializeField] NavMeshSurface navMeshSurface;
         [SerializeField] VillageSpawner villageSpawner;
-        [SerializeField] bool dontDestroyOnLoad = false;
-        [Header("Overlay Detection")]
+                [Header("Overlay Detection")]
         [SerializeField] bool useBuildLayerFallback = true;
         [Tooltip("Parent transforms under which TWC instantiates overlay objects (enable 'group under parent' in TWC).")]
         [SerializeField] List<OverlayBuildRoot> overlayBuildRoots = new List<OverlayBuildRoot>();
@@ -95,13 +94,6 @@ namespace Tiles
             if (origin == default && tileWorldCreator != null)
             {
                 origin = tileWorldCreator.transform.position;
-                if (dontDestroyOnLoad)
-                {
-                    DontDestroyOnLoad(tileWorldCreatorMap);
-                    DontDestroyOnLoad(tileGrid.gameObject);
-                    DontDestroyOnLoad(gameObject);
-             
-                }
                     
             }
                 

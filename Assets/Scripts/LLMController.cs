@@ -844,13 +844,26 @@ public class LLMController : MonoBehaviour
                 || d.jobStatus.Contains("Waiting")
                 || d.jobStatus.Contains("No ")
                 || d.jobStatus.Contains("not found")
-                || d.jobStatus.Contains("Looking");
+                || d.jobStatus.Contains("Looking")
+                || d.jobStatus.Contains("already completed");
             string tag = isStuck ? "[NEEDS ASSIGNMENT]" : "[KEEP]";
             string previousJob = _lastAssignedJob.TryGetValue(d.name, out var prev) && prev != d.currentJob
                 ? $", was {prev}"
                 : "";
             string energyTag = d.energy < 5 ? " [EXHAUSTED — must rest!]" : d.energy < 30 ? $" [TIRED — working at {d.energy}% speed, assign IDLE to recover]" : "";
-            sb.AppendLine($"- {d.name} {tag}: {d.currentJob} at ({d.x},{d.y}){previousJob}, Status=\"{d.jobStatus}\", Energy={d.energy}%{energyTag}");
+
+            // Add explicit error feedback when the last assignment failed
+            string errorTag = "";
+            if (d.jobStatus.Contains("already completed"))
+                errorTag = " !! PREVIOUS ASSIGNMENT FAILED: building at that location is already finished. Assign a DIFFERENT location or job !!";
+            else if (d.jobStatus.Contains("Waiting for resources"))
+                errorTag = " !! PREVIOUS ASSIGNMENT FAILED: not enough resources to build. Gather resources first !!";
+            else if (d.jobStatus.Contains("No farm"))
+                errorTag = " !! PREVIOUS ASSIGNMENT FAILED: no completed Farm exists. Build a Farm first !!";
+            else if (d.jobStatus.Contains("field cap") || d.jobStatus.Contains("Field limit"))
+                errorTag = " !! PREVIOUS ASSIGNMENT FAILED: field capacity reached. Build another Farm or assign a different job !!";
+
+            sb.AppendLine($"- {d.name} {tag}: {d.currentJob} at ({d.x},{d.y}){previousJob}, Status=\"{d.jobStatus}\", Energy={d.energy}%{energyTag}{errorTag}");
         }
         sb.AppendLine();
 

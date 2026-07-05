@@ -111,15 +111,31 @@ namespace Benchmark
 
         void Start()
         {
-            if (_waitingForSceneReload)
-            {
-                _waitingForSceneReload = false;
-                StartCoroutine(ConfigureAndStartNextRun());
-                return;
-            }
+            SceneManager.sceneLoaded += OnSceneLoaded;
 
             if (autoStart)
                 StartBenchmark();
+        }
+
+        void OnDestroy()
+        {
+            SceneManager.sceneLoaded -= OnSceneLoaded;
+        }
+
+        private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+        {
+            if (_waitingForSceneReload)
+            {
+                _waitingForSceneReload = false;
+                StartCoroutine(DelayedStartNextRun());
+            }
+        }
+
+        private IEnumerator DelayedStartNextRun()
+        {
+            // Wait for scene to fully initialize — map loading, NavMesh baking, etc.
+            yield return new WaitForSecondsRealtime(5f);
+            StartCoroutine(ConfigureAndStartNextRun());
         }
 
         // Idle detection
@@ -351,10 +367,11 @@ namespace Benchmark
                 return manifest;
             }
 
-            // Full matrix: models × goal presets × maps × repetitions
-            foreach (var mc in models)
+            // Full matrix: goal presets × models × maps × repetitions
+            // Goal presets first so all 1-goal runs complete before 3-goal, etc.
+            foreach (var preset in goalPresets)
             {
-                foreach (var preset in goalPresets)
+                foreach (var mc in models)
                 {
                     for (int mapIdx = 0; mapIdx < mapFiles.Length; mapIdx++)
                     {
@@ -366,8 +383,8 @@ namespace Benchmark
                                 runId = $"{sanitizedModel}_{preset.label}_{mapSizeLabels[mapIdx]}_rep{rep}",
                                 modelName = mc.modelName,
                                 thinkMode = mc.thinkMode.ToString(),
-                    forceJsonFormat = mc.forceJsonFormat,
-                    maxOutputTokens = mc.maxOutputTokens,
+                                forceJsonFormat = mc.forceJsonFormat,
+                                maxOutputTokens = mc.maxOutputTokens,
                                 mapFile = mapFiles[mapIdx],
                                 mapSize = mapSizeLabels[mapIdx],
                                 goals = new List<GoalConfig>(preset.goals),
@@ -410,32 +427,7 @@ namespace Benchmark
                 yield return null;
             }
 
-            // Start the simulation first — this activates deactivated GameObjects (LLMController, etc.)
-            var mainMenu = FindFirstObjectByType<MainMenu.MainMenu>();
-            if (mainMenu != null)
-                mainMenu.OnStartPressed();
-
-            // Wait a frame for Awake() to run on newly activated objects
-            yield return null;
-
-            // Now configure model and think mode
-            if (GlobalSettings.Instance != null)
-                GlobalSettings.Instance.LLMModel = _currentRun.modelName;
-
-            if (LLMController.Instance != null)
-            {
-                if (Enum.TryParse<ThinkMode>(_currentRun.thinkMode, out var tm))
-                    LLMController.Instance.CurrentThinkMode = tm;
-                LLMController.Instance.ForceJsonFormat = _currentRun.forceJsonFormat;
-                LLMController.Instance.MaxOutputTokens = _currentRun.maxOutputTokens;
-                Debug.Log($"[BenchmarkRunner] Config applied: model={_currentRun.modelName}, think={_currentRun.thinkMode}, jsonFormat={_currentRun.forceJsonFormat}, maxTokens={_currentRun.maxOutputTokens}");
-            }
-            else
-            {
-                Debug.LogWarning("[BenchmarkRunner] LLMController not found — settings will use Inspector defaults");
-            }
-
-            // Configure goals
+            // Configure goals (before map load, GlobalGoals should be ready)
             if (GlobalGoals.Instance != null)
             {
                 GlobalGoals.Instance.ClearGoals();
@@ -445,7 +437,7 @@ namespace Benchmark
                 GlobalGoals.Instance.SetGoals(globalGoals);
             }
 
-            // Load map
+            // Load map and wait for NavMesh BEFORE activating game objects
             var bridge = FindFirstObjectByType<TWCBridge>();
             if (bridge != null)
             {
@@ -476,6 +468,31 @@ namespace Benchmark
                 }
             }
 
+            // NOW activate game objects (villagers need NavMesh to exist)
+            var mainMenu = FindFirstObjectByType<MainMenu.MainMenu>();
+            if (mainMenu != null)
+                mainMenu.OnStartPressed();
+
+            // Wait a frame for Awake() to run on newly activated objects
+            yield return null;
+
+            // Configure model and think mode
+            if (GlobalSettings.Instance != null)
+                GlobalSettings.Instance.LLMModel = _currentRun.modelName;
+
+            if (LLMController.Instance != null)
+            {
+                if (Enum.TryParse<ThinkMode>(_currentRun.thinkMode, out var tm))
+                    LLMController.Instance.CurrentThinkMode = tm;
+                LLMController.Instance.ForceJsonFormat = _currentRun.forceJsonFormat;
+                LLMController.Instance.MaxOutputTokens = _currentRun.maxOutputTokens;
+                Debug.Log($"[BenchmarkRunner] Config applied: model={_currentRun.modelName}, think={_currentRun.thinkMode}, jsonFormat={_currentRun.forceJsonFormat}, maxTokens={_currentRun.maxOutputTokens}");
+            }
+            else
+            {
+                Debug.LogWarning("[BenchmarkRunner] LLMController not found — settings will use Inspector defaults");
+            }
+
             // Subscribe to goal completion
             if (GlobalGoals.Instance != null)
                 GlobalGoals.Instance.OnAllGlobalGoalsCompleted += OnAllGoalsCompleted;
@@ -485,7 +502,7 @@ namespace Benchmark
                 BenchmarkLogger.Instance.BeginRun(_currentRun);
 
             // Start paused — speed 0 until first LLM decision arrives
-            yield return null; // Wait a frame for VillageState to exist
+            yield return null;
             if (VillageState.Instance != null)
                 VillageState.Instance.SetGameSpeed(0f);
 
@@ -572,10 +589,10 @@ namespace Benchmark
         {
             models = new[]
             {
-                new ModelConfig { modelName = "gemma4:e4b", thinkMode = ThinkMode.Low, forceJsonFormat = true, maxOutputTokens = 4096 },
-                new ModelConfig { modelName = "qwen3:8b", thinkMode = ThinkMode.Low, forceJsonFormat = false, maxOutputTokens = 0 },
                 new ModelConfig { modelName = "gpt-oss:20b-cloud", thinkMode = ThinkMode.Low, forceJsonFormat = false, maxOutputTokens = 0 },
-                new ModelConfig { modelName = "nemotron-3-super:cloud", thinkMode = ThinkMode.Low, forceJsonFormat = true, maxOutputTokens = 0 }
+                new ModelConfig { modelName = "nemotron-3-super:cloud", thinkMode = ThinkMode.Off, forceJsonFormat = true, maxOutputTokens = 0 },
+                new ModelConfig { modelName = "gemma4:e4b", thinkMode = ThinkMode.Low, forceJsonFormat = true, maxOutputTokens = 4096 },
+                new ModelConfig { modelName = "qwen3:8b", thinkMode = ThinkMode.Off, forceJsonFormat = false, maxOutputTokens = 0 }
             };
             Debug.Log("[BenchmarkRunner] Models reset to defaults");
         }
