@@ -45,6 +45,14 @@ public class LLMController : MonoBehaviour
     [Tooltip("Controls reasoning/thinking for models that support it (e.g. gpt-oss).")]
     [SerializeField] private ThinkMode thinkMode = ThinkMode.ModelDefault;
 
+    [Header("Structured Output")]
+    [Tooltip("Force JSON output via Ollama's format constraint. Prevents malformed JSON from weaker models.")]
+    [SerializeField] private bool forceJsonFormat = false;
+
+    [Header("Generation Limits")]
+    [Tooltip("Max output tokens (num_predict). 0 = Ollama default. Set to 2048+ for reasoning models that use tokens for internal thinking.")]
+    [SerializeField] private int maxOutputTokens = 0;
+
     [Header("Memory Settings")]
     [Tooltip("Number of past user/assistant message pairs to retain. 0 = stateless.")]
     [SerializeField] private int memoryPairs = 3;
@@ -75,6 +83,11 @@ public class LLMController : MonoBehaviour
     public bool IsReady { get; private set; }
     public string CurrentModel => defaultModel;
     public bool UseBatchDecisions => useBatchDecisions;
+    public bool UseConversationMemory => useConversationMemory;
+    public ThinkMode CurrentThinkMode { get => thinkMode; set => thinkMode = value; }
+    public bool ForceJsonFormat { get => forceJsonFormat; set => forceJsonFormat = value; }
+    public int MaxOutputTokens { get => maxOutputTokens; set => maxOutputTokens = value; }
+    public int ContextSize => contextSize;
     
     
     void LogError(string msg)   => GameLog.LogError(LogCategory, msg, this);
@@ -331,18 +344,16 @@ public class LLMController : MonoBehaviour
         {
             yield return new WaitForSecondsRealtime(batchDecisionInterval);
 
-            if (IsReady && VillageState.Instance != null && VillageState.Instance.Villagers.Count > 0)
-            {
-                if (TimeSinceLastBatch < batchDecisionInterval)
-                {
-                    LogEvent($"Fallback skipped — recent decision {TimeSinceLastBatch:F1}s ago.");
-                    continue;
-                }
+            if (!IsReady || VillageState.Instance == null || VillageState.Instance.Villagers.Count == 0)
+                continue;
 
-                LogEvent($"Fallback interval triggered batch decision.");
-                _currentTriggerReason = "fallback_interval";
-                yield return RequestBatchDecisions();
-            }
+            // Skip if a decision happened recently (event-triggered or benchmark-triggered)
+            if (TimeSinceLastBatch < batchDecisionInterval * 0.9f)
+                continue;
+
+            LogEvent($"Fallback interval triggered batch decision.");
+            _currentTriggerReason = "fallback_interval";
+            yield return RequestBatchDecisions();
         }
     }
 
@@ -414,7 +425,7 @@ public class LLMController : MonoBehaviour
         }
     }
 
-    private List<string> GetAvailableJobNames()
+    public List<string> GetAvailableJobNames()
     {
         var jobTypes = Resources.LoadAll<JobType>("");
         var names = new List<string>();
@@ -440,10 +451,11 @@ public class LLMController : MonoBehaviour
     private string BuildBatchSystemPrompt(List<string> availableJobs, int villagerCount)
     {
         var energyRates = GetEnergyRates();
+        var buildingCosts = GetBuildingCostsString();
         bool caveman = GlobalSettings.Instance != null && GlobalSettings.Instance.UseCavemanPrompt;
         string prompt = caveman
             ? LLMPromptCaveman.BuildBatchSystemPrompt(availableJobs, villagerCount, energyRates)
-            : LLMPromptNormal.BuildBatchSystemPrompt(availableJobs, villagerCount, energyRates);
+            : LLMPromptNormal.BuildBatchSystemPrompt(availableJobs, villagerCount, energyRates, buildingCosts);
 
         // Inject reasoning level directive for models that read it from the system prompt (e.g. gpt-oss)
         if (thinkMode != ThinkMode.ModelDefault)
@@ -453,6 +465,27 @@ public class LLMController : MonoBehaviour
         }
 
         return prompt;
+    }
+
+    public string GetBuildingCostsString()
+    {
+        var jobTypes = Resources.LoadAll<JobType>("Villagers/Jobs");
+        foreach (var jt in jobTypes)
+        {
+            if (jt?.JobLogic is BuilderLogic builder && builder.buildableTypes.Count > 0)
+            {
+                var parts = new List<string>();
+                foreach (var bd in builder.buildableTypes)
+                {
+                    if (bd == null || bd.levels.Count == 0) continue;
+                    var level = bd.levels[0];
+                    string foodPart = level.foodCost > 0 ? $" + {level.foodCost} food" : "";
+                    parts.Add($"{bd.buildingType} (costs {level.woodCost} wood + {level.stoneCost} stone{foodPart})");
+                }
+                return string.Join(", ", parts);
+            }
+        }
+        return "";
     }
 
     private (float drain, float walkDrain, float recovery) GetEnergyRates()
@@ -666,6 +699,9 @@ public class LLMController : MonoBehaviour
     private bool ShouldUseFullSnapshot()
     {
         if (_decisionCount == 0) return true;
+        // Delta context only makes sense with conversation memory — without it the LLM
+        // has no prior state to compare against, so always send the full snapshot.
+        if (!useConversationMemory) return true;
         if (_decisionCount % FullSnapshotInterval == 0) return true;
         // Only crisis-trigger if food was previously healthy and just dropped — not early game zero
         if (VillageState.Instance != null && _lastFood >= 5 && VillageState.Instance.Food < 5) return true;
@@ -919,9 +955,16 @@ public class LLMController : MonoBehaviour
                 _ => null // ModelDefault — let the model decide
             };
 
+            object formatParam = forceJsonFormat ? (object)"json" : null;
+
+            // Build runtime options (num_predict, etc.)
+            Dictionary<string, object> runtimeOptions = null;
+            if (maxOutputTokens > 0)
+                runtimeOptions = new Dictionary<string, object> { { "num_predict", maxOutputTokens } };
+
             var chatResponse = useConversationMemory
-                ? await OllamaExtensions.ChatWithMetadataExt(defaultModel, fullPrompt, _conversation, keepAliveSeconds, contextSize, null, thinkParam)
-                : await OllamaExtensions.ChatWithMetadataExt(defaultModel, fullPrompt, keepAliveSeconds, contextSize, null, thinkParam);
+                ? await OllamaExtensions.ChatWithMetadataExt(defaultModel, fullPrompt, _conversation, keepAliveSeconds, contextSize, null, thinkParam, formatParam, runtimeOptions)
+                : await OllamaExtensions.ChatWithMetadataExt(defaultModel, fullPrompt, keepAliveSeconds, contextSize, null, thinkParam, formatParam, runtimeOptions);
             
             metrics.responseTime = (DateTime.Now - startTime).TotalSeconds;
             metrics.responseLength = chatResponse.content.Length;
@@ -1006,10 +1049,24 @@ public class LLMController : MonoBehaviour
                     inputState.activeGoals.Add(g.Description + (g.isCompleted ? " [DONE]" : ""));
             }
 
+            // Collect building details
+            var allBuildings = UnityEngine.Object.FindObjectsByType<Buildings.Building>(FindObjectsSortMode.None);
+            foreach (var b in allBuildings)
+            {
+                if (b == null || b.buildingData == null) continue;
+                var tile = b.GetComponentInParent<Tiles.Tile>();
+                string pos = tile != null ? $"({tile.GridPos.x},{tile.GridPos.y})" : "";
+                if (b.IsFinished())
+                    inputState.completedBuildings.Add($"{b.buildingData.buildingType} {pos}");
+                else
+                    inputState.unfinishedBuildings.Add($"{b.buildingData.buildingType} {pos} ({b.GetProgressPercent()}%)");
+            }
+
             OnBatchDecisionLogged.Invoke(new BatchDecisionLog
             {
                 simTick = SimTickTracker.CurrentTick,
                 triggerReason = _currentTriggerReason,
+                contextType = fullSnapshot ? "full" : "delta",
                 inputState = inputState,
                 rawResponse = rawResponseText,
                 parsedDecisions = results,
@@ -1027,6 +1084,8 @@ public class LLMController : MonoBehaviour
         try
         {
             response = Regex.Replace(response, @"<think>[\s\S]*?</think>", "", RegexOptions.IgnoreCase).Trim();
+            // Strip markdown code fences (```json ... ```) that some models wrap around JSON
+            response = Regex.Replace(response, @"```\w*\n?", "").Trim();
 
             var match = Regex.Match(response, @"\{[\s\S]*\}");
             if (!match.Success)
@@ -1037,7 +1096,10 @@ public class LLMController : MonoBehaviour
                 return results;
             }
 
-            var raw = JsonUtility.FromJson<RawBatchDecision>(match.Value);
+            // JsonUtility can't handle null — remove null-valued fields entirely so defaults apply
+            string jsonText = Regex.Replace(match.Value, @"""[^""]+"":\s*null\s*,?\s*", "");
+
+            var raw = JsonUtility.FromJson<RawBatchDecision>(jsonText);
 
             if (raw.assignments != null && raw.assignments.Count > 0)
             {

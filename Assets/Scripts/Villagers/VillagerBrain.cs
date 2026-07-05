@@ -34,7 +34,9 @@ public class VillagerBrain : MonoBehaviour
     private float _lastAppliedDecisionTime;
     private bool _waitingForBatch;
     private int _restUntilEnergy; // 0 = no target; >0 = wait until villager reaches this % before requesting
+    private bool _llmAssignedIdle; // LLM explicitly assigned IDLE — don't treat as "needs orders"
     public bool IsResting => _restUntilEnergy > 0;
+    public bool IsLLMAssignedIdle => _llmAssignedIdle;
 
     // Mini-goal tracking
     private int _gatherGoalAmount;
@@ -265,18 +267,32 @@ public class VillagerBrain : MonoBehaviour
 
         ClearGatherGoal();
         _restUntilEnergy = 0;
+        _llmAssignedIdle = false;
 
         if (decision.IsIdle || !decision.success)
         {
             _jobHandler.AssignJob(null);
             if (decision.restUntilEnergy > 0)
             {
-                _restUntilEnergy = Mathf.Clamp(decision.restUntilEnergy, 1, 100);
-                currentState = $"Resting until {_restUntilEnergy}% energy";
-                LogEvent($"{_villager.villagerName} rest target set: {_restUntilEnergy}%");
+                int target = Mathf.Clamp(decision.restUntilEnergy, 1, 100);
+                // If energy is already at or above the target, treat as LLM-assigned idle
+                // to avoid an instant re-trigger loop
+                if (_villager.EnergyPercent >= target)
+                {
+                    _llmAssignedIdle = true;
+                    currentState = "Idle (energy already sufficient)";
+                    LogEvent($"{_villager.villagerName} rest target {target}% already met (at {_villager.EnergyPercent}%) — treating as idle");
+                }
+                else
+                {
+                    _restUntilEnergy = target;
+                    currentState = $"Resting until {_restUntilEnergy}% energy";
+                    LogEvent($"{_villager.villagerName} rest target set: {_restUntilEnergy}%");
+                }
             }
             else
             {
+                _llmAssignedIdle = true;
                 currentState = "Idle";
             }
             return;

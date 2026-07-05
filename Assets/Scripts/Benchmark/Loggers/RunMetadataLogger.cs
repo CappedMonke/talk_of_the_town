@@ -101,6 +101,20 @@ namespace Benchmark.Loggers
             _metadata.elapsedRealTimeSeconds = Time.realtimeSinceStartup - _startRealTime;
             _metadata.sessionStats = sessionStats;
 
+            // Capture LLM settings at finalization (LLMController is guaranteed ready by now)
+            var llm = LLMController.Instance;
+            if (llm != null)
+            {
+                _metadata.llmSettings = new LLMSettings
+                {
+                    useConversationMemory = llm.UseConversationMemory,
+                    memoryPairs = llm.MemoryPairs,
+                    thinkMode = llm.CurrentThinkMode.ToString(),
+                    contextSize = llm.ContextSize,
+                    useCavemanPrompt = GlobalSettings.Instance != null && GlobalSettings.Instance.UseCavemanPrompt
+                };
+            }
+
             string json = JsonUtility.ToJson(_metadata, true);
             string path = Path.Combine(_outputDir, "run_metadata.json");
             File.WriteAllText(path, json);

@@ -24,6 +24,19 @@ namespace ollama
         /// </summary>
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public object think;
+        /// <summary>
+        /// Forces structured output. Set to "json" for basic JSON mode,
+        /// or a JSON schema object for grammar-constrained output.
+        /// null = no constraint (model output is freeform).
+        /// </summary>
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public object format;
+        /// <summary>
+        /// Runtime options passed to the model (num_predict, temperature, top_p, etc.).
+        /// null = use Ollama defaults.
+        /// </summary>
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public Dictionary<string, object> options;
     }
 
     [Serializable]
@@ -150,7 +163,9 @@ namespace ollama
             int keep_alive = 300,
             int num_ctx = 0,
             Texture2D image = null,
-            object think = null)
+            object think = null,
+            object format = null,
+            Dictionary<string, object> options = null)
         {
             try
             {
@@ -170,10 +185,13 @@ namespace ollama
                     stream = false,
                     keep_alive = keep_alive,
                     num_ctx = num_ctx > 0 ? num_ctx : (int?)null,
-                    think = think
+                    think = think,
+                    format = format,
+                    options = options
                 };
 
-                string payload = JsonConvert.SerializeObject(request);
+                string payload = JsonConvert.SerializeObject(request, Formatting.None,
+                    new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore });
 
                 HttpWebRequest httpWebRequest = (HttpWebRequest)WebRequest.Create($"{SERVER}{CHAT_ENDPOINT}");
                 httpWebRequest.ContentType = "application/json";
@@ -229,7 +247,9 @@ namespace ollama
             int keep_alive = 300,
             int num_ctx = 0,
             Texture2D image = null,
-            object think = null)
+            object think = null,
+            object format = null,
+            Dictionary<string, object> options = null)
         {
             try
             {
@@ -253,10 +273,13 @@ namespace ollama
                     stream = false,
                     keep_alive = keep_alive,
                     num_ctx = num_ctx > 0 ? num_ctx : (int?)null,
-                    think = think
+                    think = think,
+                    format = format,
+                    options = options
                 };
 
-                string payload = JsonConvert.SerializeObject(request);
+                string payload = JsonConvert.SerializeObject(request, Formatting.None,
+                    new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore });
 
                 HttpWebRequest httpWebRequest = (HttpWebRequest)WebRequest.Create($"{SERVER}{CHAT_ENDPOINT}");
                 httpWebRequest.ContentType = "application/json";

@@ -137,7 +137,26 @@ public class BuilderLogic : JobLogic
 
         if (_phase == BuilderPhase.Placing)
         {
-            _currentTarget = PlaceFoundation(_targetTile, PickBuildingData(handler));
+            var buildingData = PickBuildingData(handler);
+
+            // Check resources BEFORE placing foundation — don't create orphaned construction sites
+            if (buildingData != null && buildingData.levels.Count > 0)
+            {
+                var levelData = buildingData.levels[0];
+                bool hasFood = levelData.foodCost <= 0 || VillageState.Instance.HasResource(ResourceType.Food, levelData.foodCost);
+                if (!VillageState.Instance.HasResource(ResourceType.Wood, levelData.woodCost)
+                    || !VillageState.Instance.HasResource(ResourceType.Stone, levelData.stoneCost)
+                    || !hasFood)
+                {
+                    string foodPart = levelData.foodCost > 0 ? $", {levelData.foodCost} food" : "";
+                    currentStatus = $"Need {levelData.woodCost} wood, {levelData.stoneCost} stone{foodPart} to start {buildingData.buildingType}";
+                    _targetTile = null;
+                    ChangeState(AnimationState.Idle, handler);
+                    return;
+                }
+            }
+
+            _currentTarget = PlaceFoundation(_targetTile, buildingData);
             _targetTile = null;
 
             if (_currentTarget == null)

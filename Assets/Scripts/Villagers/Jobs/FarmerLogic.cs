@@ -26,11 +26,15 @@ public class FarmerLogic : JobLogic
     [NonSerialized] private FarmerPhase _phase;
     [NonSerialized] private Tile _targetTile;
     [NonSerialized] private ResourceNode _targetCrop;
+    [NonSerialized] private bool _loggedNoFarm;
+    [NonSerialized] private bool _loggedFieldCap;
 
     protected override void OnInitialize(JobHandler handler)
     {
         _targetTile = null;
         _targetCrop = null;
+        _loggedNoFarm = false;
+        _loggedFieldCap = false;
         ChangeState(AnimationState.FindingTarget, handler);
     }
 
@@ -328,7 +332,11 @@ public class FarmerLogic : JobLogic
         if (farmCoverage.Count == 0)
         {
             currentStatus = "No farm buildings — cannot plant fields";
-            LogWarning($"[{handler.name}] FindEmptyGrassTile: no completed Farm buildings found — cannot plant");
+            if (!_loggedNoFarm)
+            {
+                _loggedNoFarm = true;
+                LogWarning($"[{handler.name}] FindEmptyGrassTile: no completed Farm buildings found — cannot plant");
+            }
             return null;
         }
 
@@ -342,7 +350,11 @@ public class FarmerLogic : JobLogic
             if (currentCrops >= VillageState.Instance.FieldCapacity)
             {
                 currentStatus = $"Field limit reached ({currentCrops}/{VillageState.Instance.FieldCapacity}) — build more farms";
-                LogWarning($"[{handler.name}] FindEmptyGrassTile: field cap reached ({currentCrops}/{VillageState.Instance.FieldCapacity})");
+                if (!_loggedFieldCap)
+                {
+                    _loggedFieldCap = true;
+                    LogWarning($"[{handler.name}] FindEmptyGrassTile: field cap reached ({currentCrops}/{VillageState.Instance.FieldCapacity})");
+                }
                 return null;
             }
             LogInfo($"[{handler.name}] FindEmptyGrassTile: crops={currentCrops}/{VillageState.Instance.FieldCapacity}");

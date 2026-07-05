@@ -15,8 +15,13 @@ namespace Benchmark
     public class BenchmarkRunner : MonoBehaviour
     {
         [Header("Benchmark Configuration")]
-        [Tooltip("LLM model names to benchmark (Ollama model identifiers)")]
-        [SerializeField] private string[] models = { "gemma3:12b", "qwen3:14b", "gpt-oss:120b-cloud", "gpt-oss:70b-cloud" };
+        [Tooltip("LLM models to benchmark, each with its own think mode")]
+        [SerializeField] private ModelConfig[] models = {
+            new() { modelName = "gemma4:e4b", thinkMode = ThinkMode.ModelDefault },
+            new() { modelName = "qwen3:8b", thinkMode = ThinkMode.Low },
+            new() { modelName = "gpt-oss:20b-cloud", thinkMode = ThinkMode.Low },
+            new() { modelName = "nemotron-3-super:cloud", thinkMode = ThinkMode.ModelDefault }
+        };
 
         [Tooltip("Map filenames (.twcmap) in persistentDataPath")]
         [SerializeField] private string[] mapFiles = { "small_map.twcmap", "large_map.twcmap" };
@@ -56,8 +61,8 @@ namespace Benchmark
         [Tooltip("Run a quick test with minimal config instead of the full 48-run matrix")]
         [SerializeField] private bool testMode = false;
 
-        [Tooltip("Override model for test runs (empty = use first model)")]
-        [SerializeField] private string testModel = "";
+        [Tooltip("Override model index for test runs (0 = first model)")]
+        [SerializeField] private int testModelIndex = 0;
 
         [Tooltip("Override goal preset index for test runs (0 = first preset)")]
         [SerializeField] private int testGoalPresetIndex = 0;
@@ -119,6 +124,7 @@ namespace Benchmark
 
         // Idle detection
         private bool _waitingForDecision;
+        private float _lastIdleDetectionTime;
 
         void Update()
         {
@@ -133,8 +139,14 @@ namespace Benchmark
             }
 
             // When all villagers are idle and we're running at speed, pause and force a new LLM decision
-            if (!_waitingForDecision && Time.timeScale > 0f && AllVillagersIdle())
+            // But NOT if there are growing crops — villagers may be intentionally waiting for harvest
+            // Cooldown of 30 game-seconds between idle detections to avoid spamming LLM when
+            // builders are stuck waiting for resources (LLM keeps assigning the same thing)
+            if (!_waitingForDecision && Time.timeScale > 0f && AllVillagersIdle()
+                && !HasGrowingCrops() && !HasUnfinishedBuildings()
+                && Time.time - _lastIdleDetectionTime > 30f)
             {
+                _lastIdleDetectionTime = Time.time;
                 _waitingForDecision = true;
                 VillageState.Instance?.SetGameSpeed(0f);
 
@@ -157,6 +169,30 @@ namespace Benchmark
                 VillageState.Instance.SetGameSpeed(benchmarkGameSpeed);
         }
 
+        private bool HasUnfinishedBuildings()
+        {
+            var buildings = FindObjectsByType<Buildings.Building>(FindObjectsSortMode.None);
+            foreach (var b in buildings)
+            {
+                if (b != null && !b.IsFinished())
+                    return true;
+            }
+            return false;
+        }
+
+        private bool HasGrowingCrops()
+        {
+            var nodes = FindObjectsByType<Environment.Resources.ResourceNode>(FindObjectsSortMode.None);
+            foreach (var node in nodes)
+            {
+                if (node != null
+                    && node.resourceType == Environment.Resources.ResourceNode.ResourceType.Crop
+                    && !node.IsMature)
+                    return true;
+            }
+            return false;
+        }
+
         private bool AllVillagersIdle()
         {
             if (VillageState.Instance == null) return false;
@@ -167,17 +203,29 @@ namespace Benchmark
             {
                 if (v == null) continue;
 
-                // Villager has an active job — not idle
-                var jh = v.GetComponent<JobHandler>();
-                if (jh != null && jh.currentJob != null && jh.ActiveJobLogic != null)
+                var brain = v.GetComponent<VillagerBrain>();
+
+                // LLM explicitly assigned IDLE — intentional, not "needs orders"
+                if (brain != null && brain.IsLLMAssignedIdle)
                     return false;
 
                 // Villager is resting: either LLM-set rest target or exhausted (energy < 5%)
-                var brain = v.GetComponent<VillagerBrain>();
                 if (brain != null && brain.IsResting)
                     return false;
                 if (v.EnergyPercent < 5)
                     return false;
+
+                // Check if villager has an active job that's actually doing work
+                var jh = v.GetComponent<JobHandler>();
+                if (jh != null && jh.currentJob != null && jh.ActiveJobLogic != null)
+                {
+                    var state = jh.ActiveJobLogic.GetCurrentState();
+                    // Only treat job-internal Idle as effectively idle
+                    // (e.g. builder waiting for resources, farmer waiting for farm)
+                    // FindingTarget is active work (searching for a node to harvest)
+                    if (state != Villagers.Jobs.AnimationState.Idle)
+                        return false;
+                }
             }
             return true;
         }
@@ -187,6 +235,7 @@ namespace Benchmark
         /// <summary>Start the full benchmark (or test run). Generates manifest if needed.</summary>
         public void StartBenchmark()
         {
+            if (_isRunning) return; // Prevent double-start
             LoadOrGenerateManifest();
             StartCoroutine(ConfigureAndStartNextRun());
         }
@@ -239,6 +288,15 @@ namespace Benchmark
 
         private void LoadOrGenerateManifest()
         {
+            // In test mode, always regenerate so changing testModelIndex/testGoalPresetIndex takes effect
+            if (testMode)
+            {
+                _manifest = GenerateManifest();
+                SaveManifest();
+                Debug.Log($"[BenchmarkRunner] Test mode: generated fresh manifest with {_manifest.runs.Count} run(s)");
+                return;
+            }
+
             if (File.Exists(ManifestPath))
             {
                 string json = File.ReadAllText(ManifestPath);
@@ -272,14 +330,17 @@ namespace Benchmark
 
             if (testMode)
             {
-                string model = string.IsNullOrEmpty(testModel) ? models[0] : testModel;
+                var mc = models[Mathf.Clamp(testModelIndex, 0, models.Length - 1)];
                 int mapIdx = Mathf.Clamp(testMapIndex, 0, mapFiles.Length - 1);
                 var preset = testGoalPresetIndex < goalPresets.Length ? goalPresets[testGoalPresetIndex] : goalPresets[0];
 
                 manifest.runs.Add(new BenchmarkRunConfig
                 {
-                    runId = $"test_{SanitizeModelName(model)}_{preset.label}_{mapSizeLabels[mapIdx]}_rep1",
-                    modelName = model,
+                    runId = $"test_{SanitizeModelName(mc.modelName)}_{preset.label}_{mapSizeLabels[mapIdx]}_rep1",
+                    modelName = mc.modelName,
+                    thinkMode = mc.thinkMode.ToString(),
+                    forceJsonFormat = mc.forceJsonFormat,
+                    maxOutputTokens = mc.maxOutputTokens,
                     mapFile = mapFiles[mapIdx],
                     mapSize = mapSizeLabels[mapIdx],
                     goals = new List<GoalConfig>(preset.goals),
@@ -291,7 +352,7 @@ namespace Benchmark
             }
 
             // Full matrix: models × goal presets × maps × repetitions
-            foreach (var model in models)
+            foreach (var mc in models)
             {
                 foreach (var preset in goalPresets)
                 {
@@ -299,11 +360,14 @@ namespace Benchmark
                     {
                         for (int rep = 1; rep <= repetitions; rep++)
                         {
-                            string sanitizedModel = SanitizeModelName(model);
+                            string sanitizedModel = SanitizeModelName(mc.modelName);
                             manifest.runs.Add(new BenchmarkRunConfig
                             {
                                 runId = $"{sanitizedModel}_{preset.label}_{mapSizeLabels[mapIdx]}_rep{rep}",
-                                modelName = model,
+                                modelName = mc.modelName,
+                                thinkMode = mc.thinkMode.ToString(),
+                    forceJsonFormat = mc.forceJsonFormat,
+                    maxOutputTokens = mc.maxOutputTokens,
                                 mapFile = mapFiles[mapIdx],
                                 mapSize = mapSizeLabels[mapIdx],
                                 goals = new List<GoalConfig>(preset.goals),
@@ -322,8 +386,8 @@ namespace Benchmark
 
         private IEnumerator ConfigureAndStartNextRun()
         {
-            // Wait a frame for scene objects to initialize after reload
-            yield return null;
+            // Wait for scene singletons to Awake — yield end-of-frame then one more frame
+            yield return new WaitForEndOfFrame();
             yield return null;
 
             _currentRun = FindNextPendingRun();
@@ -339,9 +403,37 @@ namespace Benchmark
             _currentRun.status = RunStatus.Running;
             SaveManifest();
 
-            // Configure model
+            // Configure model and think mode — retry briefly if singletons aren't ready yet
+            for (int i = 0; i < 60; i++) // up to ~1 second
+            {
+                if (GlobalSettings.Instance != null && LLMController.Instance != null) break;
+                yield return null;
+            }
+
+            // Start the simulation first — this activates deactivated GameObjects (LLMController, etc.)
+            var mainMenu = FindFirstObjectByType<MainMenu.MainMenu>();
+            if (mainMenu != null)
+                mainMenu.OnStartPressed();
+
+            // Wait a frame for Awake() to run on newly activated objects
+            yield return null;
+
+            // Now configure model and think mode
             if (GlobalSettings.Instance != null)
                 GlobalSettings.Instance.LLMModel = _currentRun.modelName;
+
+            if (LLMController.Instance != null)
+            {
+                if (Enum.TryParse<ThinkMode>(_currentRun.thinkMode, out var tm))
+                    LLMController.Instance.CurrentThinkMode = tm;
+                LLMController.Instance.ForceJsonFormat = _currentRun.forceJsonFormat;
+                LLMController.Instance.MaxOutputTokens = _currentRun.maxOutputTokens;
+                Debug.Log($"[BenchmarkRunner] Config applied: model={_currentRun.modelName}, think={_currentRun.thinkMode}, jsonFormat={_currentRun.forceJsonFormat}, maxTokens={_currentRun.maxOutputTokens}");
+            }
+            else
+            {
+                Debug.LogWarning("[BenchmarkRunner] LLMController not found — settings will use Inspector defaults");
+            }
 
             // Configure goals
             if (GlobalGoals.Instance != null)
@@ -364,11 +456,11 @@ namespace Benchmark
                 Action onReady = () => navMeshReady = true;
                 TWCBridge.OnNavMeshReady += onReady;
 
-                float timeout = 60f;
-                float waited = 0f;
-                while (!navMeshReady && waited < timeout)
+                float navTimeout = 60f;
+                float navWaited = 0f;
+                while (!navMeshReady && navWaited < navTimeout)
                 {
-                    waited += Time.unscaledDeltaTime;
+                    navWaited += Time.unscaledDeltaTime;
                     yield return null;
                 }
                 TWCBridge.OnNavMeshReady -= onReady;
@@ -391,11 +483,6 @@ namespace Benchmark
             // Start logging
             if (BenchmarkLogger.Instance != null)
                 BenchmarkLogger.Instance.BeginRun(_currentRun);
-
-            // Start the simulation (press the start button programmatically)
-            var mainMenu = FindFirstObjectByType<MainMenu.MainMenu>();
-            if (mainMenu != null)
-                mainMenu.OnStartPressed();
 
             // Start paused — speed 0 until first LLM decision arrives
             yield return null; // Wait a frame for VillageState to exist
@@ -478,6 +565,19 @@ namespace Benchmark
         private BenchmarkRunConfig FindNextPendingRun()
         {
             return _manifest?.runs.Find(r => r.status == RunStatus.Pending);
+        }
+
+        [ContextMenu("Reset Models to Defaults")]
+        private void ResetModelsToDefaults()
+        {
+            models = new[]
+            {
+                new ModelConfig { modelName = "gemma4:e4b", thinkMode = ThinkMode.Low, forceJsonFormat = true, maxOutputTokens = 4096 },
+                new ModelConfig { modelName = "qwen3:8b", thinkMode = ThinkMode.Low, forceJsonFormat = false, maxOutputTokens = 0 },
+                new ModelConfig { modelName = "gpt-oss:20b-cloud", thinkMode = ThinkMode.Low, forceJsonFormat = false, maxOutputTokens = 0 },
+                new ModelConfig { modelName = "nemotron-3-super:cloud", thinkMode = ThinkMode.Low, forceJsonFormat = true, maxOutputTokens = 0 }
+            };
+            Debug.Log("[BenchmarkRunner] Models reset to defaults");
         }
 
         private static string SanitizeModelName(string model)

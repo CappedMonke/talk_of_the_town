@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Tiles;
+using UnityEngine;
 
 namespace Benchmark
 {
@@ -10,6 +11,21 @@ namespace Benchmark
         Running,
         Completed,
         Failed
+    }
+
+    /// <summary>
+    /// A model with its per-model think mode setting.
+    /// Non-reasoning models (llama, gemma, qwen2.5) should use ModelDefault.
+    /// Reasoning models (gpt-oss, qwen3) should use Low or another level.
+    /// </summary>
+    [Serializable]
+    public class ModelConfig
+    {
+        public string modelName;
+        public ThinkMode thinkMode = ThinkMode.ModelDefault;
+        public bool forceJsonFormat = false;
+        [Tooltip("0 = Ollama default. Reasoning models need 2048+ to leave room for thinking + output.")]
+        public int maxOutputTokens = 0;
     }
 
     /// <summary>
@@ -55,6 +71,9 @@ namespace Benchmark
     {
         public string runId;
         public string modelName;
+        public string thinkMode;     // ThinkMode to apply for this model
+        public bool forceJsonFormat; // Force JSON structured output via Ollama
+        public int maxOutputTokens;  // num_predict for this model
         public string mapFile;       // .twcmap filename
         public string mapSize;       // "small" or "large" (metadata label)
         public List<GoalConfig> goals = new();
@@ -86,6 +105,8 @@ namespace Benchmark
         public List<string> idleVillagers = new();
         public List<string> activeGoals = new();
         public int buildingCount;
+        public List<string> completedBuildings = new();
+        public List<string> unfinishedBuildings = new();
     }
 
     [Serializable]
@@ -124,6 +145,7 @@ namespace Benchmark
     {
         public long simTick;
         public string triggerReason;
+        public string contextType; // "full" or "delta"
         public InputStateSnapshot inputState;
         public string rawResponse;
         public List<ParsedAssignment> parsedAssignments = new();
@@ -140,6 +162,7 @@ namespace Benchmark
     {
         public long simTick;
         public string triggerReason;
+        public string contextType; // "full" or "delta"
         public InputStateSnapshot inputState;
         public string rawResponse;
         public Dictionary<string, JobDecision> parsedDecisions;
@@ -176,6 +199,16 @@ namespace Benchmark
     }
 
     [Serializable]
+    public class LLMSettings
+    {
+        public bool useConversationMemory;
+        public int memoryPairs;
+        public string thinkMode;
+        public int contextSize;
+        public bool useCavemanPrompt;
+    }
+
+    [Serializable]
     public class RunMetadata
     {
         public string runId;
@@ -193,6 +226,7 @@ namespace Benchmark
         public float elapsedGameTimeSeconds;
         public float elapsedRealTimeSeconds;
         public MapStatistics mapStats;
+        public LLMSettings llmSettings;
         public LLMSessionStats sessionStats;
     }
 }

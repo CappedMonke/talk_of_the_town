@@ -5,7 +5,7 @@ using System.Collections.Generic;
 /// </summary>
 public static class LLMPromptNormal
 {
-    public static string BuildBatchSystemPrompt(List<string> availableJobs, int villagerCount, (float drain, float walkDrain, float recovery) energyRates = default)
+    public static string BuildBatchSystemPrompt(List<string> availableJobs, int villagerCount, (float drain, float walkDrain, float recovery) energyRates = default, string buildingCosts = "")
     {
         string jobList = string.Join(", ", availableJobs);
 
@@ -27,10 +27,10 @@ AVAILABLE JOBS: {jobList}, IDLE
 JOB DESCRIPTIONS:
 - Lumberjack: Chops trees for wood. Assign to TREE locations. Trees regrow after being cut — they are a renewable resource.
 - Miner: Mines stone deposits. Assign to STONE locations (fast). MINE SHAFT locations give infinite stone but are MUCH slower — they are always available, so once the village grows (10+ villagers), consider keeping one miner permanently at the mine shaft. Always prefer regular STONE first while deposits last.
-- Builder: Constructs buildings. Needs wood+stone in inventory. Set ""buildingType"" to one of: House (villager spawns automatically when complete — but the spawn also costs 5 wood + 5 stone + 5 seeds + 10 food from village stores), Stockpile (increases inventory capacity), Farm (expands farming area). Choose based on village needs.
+- Builder: Constructs buildings. Resources are consumed BEFORE construction starts — if not enough, the builder cannot begin. Set ""buildingType"" to one of: {(string.IsNullOrEmpty(buildingCosts) ? "House, Stockpile, Farm" : buildingCosts)}. Villager spawns automatically when a House completes (spawn also costs 5 wood + 5 stone + 5 seeds + 10 food). IMPORTANT: Ensure the village has enough resources BEFORE assigning a Builder. Only assign ONE Builder at a time unless resources are abundant for multiple buildings.
 - Farmer: Plants crops on grass tiles near Farm buildings and harvests mature crops. COSTS: 2 seeds per field planted. YIELDS: 5 food + 1–3 seeds per harvest (net seed-positive, self-sustaining cycle). IMPORTANT: Farmers can ONLY plant within the radius of a completed Farm building — without a Farm, no fields can be planted. Set targetX/targetY to any grass tile near a FARM BUILDING — the farmer finds free grass automatically. Do NOT set targetX/targetY to the farm building tile itself (it is occupied). NOTE: Crops regrow after harvest — 2-3 farms is usually sufficient.
 - SeedGatherer: Collects seeds from seed nodes (pumpkins, wheat, etc.)
-- IDLE: Rest and recover energy. Villagers have an energy level (0-100%). Energy drains at {energyRates.drain:F1}/s while working, {energyRates.walkDrain:F1}/s while walking, and recovers at {energyRates.recovery:F1}/s while idle. Below 30% energy, villagers work slower (proportional to energy level). Below 5%, they stop entirely and MUST rest. A fully depleted villager takes ~{(int)(100f / energyRates.recovery)}s to fully recover. Assign exhausted or tired villagers to IDLE so they can recover before resuming work.
+- IDLE: Rest and recover energy. Villagers have an energy level (0-100%). Energy drains at {energyRates.drain.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)}/s while working, {energyRates.walkDrain.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)}/s while walking, and recovers at {energyRates.recovery.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)}/s while idle. Below 30% energy, villagers work slower (proportional to energy level). Below 5%, they stop entirely and MUST rest. A fully depleted villager takes ~{(int)(100f / energyRates.recovery)}s to fully recover. Assign exhausted or tired villagers to IDLE so they can recover before resuming work.
   OPTIONAL — ""restUntilEnergy"": set this (1-100) on an IDLE assignment to tell the villager to rest silently until they reach that energy %. Once reached, they automatically request a new assignment without an extra LLM call. Example: {{ ""job"": ""IDLE"", ""restUntilEnergy"": 80, ""reason"": ""exhausted, rest to 80%"" }}. Use this instead of just IDLE when you want the villager to resume work at a specific energy level — it avoids wasting a future LLM call on a villager who is simply recovering.
 
 PRIORITY ORDER (follow this strictly):
