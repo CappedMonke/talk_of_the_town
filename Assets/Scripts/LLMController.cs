@@ -87,7 +87,7 @@ public class LLMController : MonoBehaviour
     public ThinkMode CurrentThinkMode { get => thinkMode; set => thinkMode = value; }
     public bool ForceJsonFormat { get => forceJsonFormat; set => forceJsonFormat = value; }
     public int MaxOutputTokens { get => maxOutputTokens; set => maxOutputTokens = value; }
-    public int ContextSize => contextSize;
+    public int ContextSize { get => contextSize; set => contextSize = value; }
     
     
     void LogError(string msg)   => GameLog.LogError(LogCategory, msg, this);
@@ -756,6 +756,38 @@ public class LLMController : MonoBehaviour
             sb.AppendLine($"Under construction: {unfinished} building(s)");
 
         AppendBuildingCosts(sb);
+        AppendFreeBuildLocations(sb);
+        sb.AppendLine();
+    }
+
+    private void AppendFreeBuildLocations(System.Text.StringBuilder sb)
+    {
+        if (VillageState.Instance?.TileGrid == null) return;
+
+        var core = VillageState.Instance.GetVillageCore();
+        var candidates = VillageState.Instance.TileGrid.FindTilesInRadius(core, 5, tile =>
+            tile.Archetype != null
+            && tile.Archetype.Style == TileStyle.Grass
+            && !tile.HasBuilding
+            && !tile.HasResource);
+
+        if (candidates.Count == 0) return;
+
+        // Sort by distance to core, pick up to 6
+        candidates.Sort((a, b) =>
+        {
+            float da = Vector2Int.Distance(a.GridPos, core);
+            float db = Vector2Int.Distance(b.GridPos, core);
+            return da.CompareTo(db);
+        });
+
+        int count = Mathf.Min(candidates.Count, 6);
+        sb.Append("FREE BUILD SITES (use these for Builder targetX/targetY): ");
+        for (int i = 0; i < count; i++)
+        {
+            if (i > 0) sb.Append(", ");
+            sb.Append($"({candidates[i].GridPos.x},{candidates[i].GridPos.y})");
+        }
         sb.AppendLine();
     }
 

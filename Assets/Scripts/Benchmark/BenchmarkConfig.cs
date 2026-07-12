@@ -26,6 +26,8 @@ namespace Benchmark
         public bool forceJsonFormat = false;
         [Tooltip("0 = Ollama default. Reasoning models need 2048+ to leave room for thinking + output.")]
         public int maxOutputTokens = 0;
+        [Tooltip("0 = model default context window. Set higher for models with small defaults (e.g. gemma3 = 8K).")]
+        public int contextSize = 0;
     }
 
     /// <summary>
@@ -74,6 +76,7 @@ namespace Benchmark
         public string thinkMode;     // ThinkMode to apply for this model
         public bool forceJsonFormat; // Force JSON structured output via Ollama
         public int maxOutputTokens;  // num_predict for this model
+        public int contextSize;      // num_ctx override (0 = model default)
         public string mapFile;       // .twcmap filename
         public string mapSize;       // "small" or "large" (metadata label)
         public List<GoalConfig> goals = new();

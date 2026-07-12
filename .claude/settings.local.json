@@ -11,7 +11,18 @@
       "Bash(python -c ':*)",
       "Bash(ls /c/Python*/python.exe)",
       "Read(//c/Users/**)",
-      "Bash('/c/Users/Florian Buchholz/AppData/Local/Programs/Python/Python313/python.exe' -c ':*)"
+      "Bash('/c/Users/Florian Buchholz/AppData/Local/Programs/Python/Python313/python.exe' -c ':*)",
+      "Bash(find 'C:/Users/Florian Buchholz/AppData/LocalLow/DefaultCompany/talk_of_the_town/__TRACKED_VAR__' -name run_metadata.json -exec cat '{}' ';')",
+      "Bash(python3 -c \" import sys, json for i, line in enumerate\\(sys.stdin\\): line = line.strip\\(\\) if not line: continue d = json.loads\\(line\\) tick = d['simTick'] success = d['success'] resp_len = len\\(d.get\\('rawResponse',''\\)\\) tokens = d['tokenCount'] trigger = d['triggerReason'] ctx = d.get\\('contextType','?'\\) assignments = [\\(a['villager'], a['job']\\) for a in d.get\\('parsedAssignments',[]\\)] print\\(f'Call {i+1}: tick={tick} ctx={ctx} trigger={trigger} resp_len={resp_len} tokens={tokens} success={success}'\\) print\\(f' Assignments: {assignments}'\\) if resp_len < 5: print\\(f' RAW: \\\\\"{d.get\\(\\\\\"rawResponse\\\\\",\\\\\"\\\\\"\\)}\\\\\"'\\) \")",
+      "Bash(python3 -c \" import sys, json for i, line in enumerate\\(sys.stdin\\): line = line.strip\\(\\) if not line: continue d = json.loads\\(line\\) raw = d.get\\('rawResponse',''\\) print\\(f'--- Call {i+1} \\(tick {d[\\\\\"simTick\\\\\"]}\\) ---'\\) print\\(f'Response length: {len\\(raw\\)}'\\) print\\(f'First 500 chars: {raw[:500]}'\\) print\\(\\) \")",
+      "Bash(xargs -I{} sed -n '{}p' \"C:/Users/Florian Buchholz/AppData/LocalLow/DefaultCompany/talk_of_the_town/BenchmarkRuns/test_gemma4-e4b_1goal_small_rep1/llm_decisions.jsonl\")",
+      "Bash(find \"C:/Users/Florian Buchholz/AppData/LocalLow/DefaultCompany/talk_of_the_town/BenchmarkRuns\" -name \"system_prompt.txt\" -exec echo {} \\\\; -exec grep -i \"house.*cost\\\\|cost.*house\\\\|food.*house\\\\|Farm.*cost\\\\|cost.*Farm\" {} \\\\;)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d, indent=2\\)\\)\")",
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d, indent=2\\)\\)\")",
+      "Bash(python3 -c ':*)",
+      "Bash(node -e ':*)",
+      "Bash(ls \"C:/Users/Florian Buchholz/AppData/LocalLow/DefaultCompany/talk_of_the_town/BenchmarkRuns/gemma3-12b_1goal_small_rep1/\"*.json)",
+      "Bash(ls \"C:/Users/Florian Buchholz/AppData/LocalLow/DefaultCompany/talk_of_the_town/BenchmarkRuns/gemma3-12b_1goal_small_rep1/\"*.txt)"
     ]
   }
 }

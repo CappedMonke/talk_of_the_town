@@ -17,7 +17,7 @@ namespace Benchmark
         [Header("Benchmark Configuration")]
         [Tooltip("LLM models to benchmark, each with its own think mode")]
         [SerializeField] private ModelConfig[] models = {
-            new() { modelName = "gemma4:e4b", thinkMode = ThinkMode.ModelDefault },
+            new() { modelName = "gemma3:12b", thinkMode = ThinkMode.ModelDefault, contextSize = 32768 },
             new() { modelName = "qwen3:8b", thinkMode = ThinkMode.Low },
             new() { modelName = "gpt-oss:20b-cloud", thinkMode = ThinkMode.Low },
             new() { modelName = "nemotron-3-super:cloud", thinkMode = ThinkMode.ModelDefault }
@@ -144,6 +144,14 @@ namespace Benchmark
 
         void Update()
         {
+            // ESC quits the application in builds
+            if (Input.GetKeyDown(KeyCode.Escape))
+            {
+                Debug.Log("[BenchmarkRunner] ESC pressed — quitting application");
+                Application.Quit();
+                return;
+            }
+
             if (!_isRunning || _currentRun == null) return;
 
             // Check tick cutoff
@@ -317,6 +325,25 @@ namespace Benchmark
             {
                 string json = File.ReadAllText(ManifestPath);
                 _manifest = JsonUtility.FromJson<BenchmarkManifest>(json);
+
+                // Reset any runs left in Running state (interrupted by crash/restart) back to Pending
+                int reset = 0;
+                foreach (var run in _manifest.runs)
+                {
+                    if (run.status == RunStatus.Running)
+                    {
+                        run.status = RunStatus.Pending;
+                        run.completedAt = null;
+                        run.abortReason = null;
+                        reset++;
+                    }
+                }
+                if (reset > 0)
+                {
+                    SaveManifest();
+                    Debug.Log($"[BenchmarkRunner] Reset {reset} interrupted run(s) back to Pending");
+                }
+
                 Debug.Log($"[BenchmarkRunner] Loaded manifest: {_manifest.runs.Count} runs ({CompletedRunCount} completed)");
             }
             else
@@ -357,6 +384,7 @@ namespace Benchmark
                     thinkMode = mc.thinkMode.ToString(),
                     forceJsonFormat = mc.forceJsonFormat,
                     maxOutputTokens = mc.maxOutputTokens,
+                    contextSize = mc.contextSize,
                     mapFile = mapFiles[mapIdx],
                     mapSize = mapSizeLabels[mapIdx],
                     goals = new List<GoalConfig>(preset.goals),
@@ -385,6 +413,7 @@ namespace Benchmark
                                 thinkMode = mc.thinkMode.ToString(),
                                 forceJsonFormat = mc.forceJsonFormat,
                                 maxOutputTokens = mc.maxOutputTokens,
+                                contextSize = mc.contextSize,
                                 mapFile = mapFiles[mapIdx],
                                 mapSize = mapSizeLabels[mapIdx],
                                 goals = new List<GoalConfig>(preset.goals),
@@ -486,7 +515,8 @@ namespace Benchmark
                     LLMController.Instance.CurrentThinkMode = tm;
                 LLMController.Instance.ForceJsonFormat = _currentRun.forceJsonFormat;
                 LLMController.Instance.MaxOutputTokens = _currentRun.maxOutputTokens;
-                Debug.Log($"[BenchmarkRunner] Config applied: model={_currentRun.modelName}, think={_currentRun.thinkMode}, jsonFormat={_currentRun.forceJsonFormat}, maxTokens={_currentRun.maxOutputTokens}");
+                LLMController.Instance.ContextSize = _currentRun.contextSize;
+                Debug.Log($"[BenchmarkRunner] Config applied: model={_currentRun.modelName}, think={_currentRun.thinkMode}, jsonFormat={_currentRun.forceJsonFormat}, maxTokens={_currentRun.maxOutputTokens}, ctx={_currentRun.contextSize}");
             }
             else
             {
@@ -496,6 +526,9 @@ namespace Benchmark
             // Subscribe to goal completion
             if (GlobalGoals.Instance != null)
                 GlobalGoals.Instance.OnAllGlobalGoalsCompleted += OnAllGoalsCompleted;
+
+            // Reset tick counter so each run starts at tick 0
+            SimTickTracker.ResetEpoch();
 
             // Start logging
             if (BenchmarkLogger.Instance != null)
@@ -591,7 +624,7 @@ namespace Benchmark
             {
                 new ModelConfig { modelName = "gpt-oss:20b-cloud", thinkMode = ThinkMode.Low, forceJsonFormat = false, maxOutputTokens = 0 },
                 new ModelConfig { modelName = "nemotron-3-super:cloud", thinkMode = ThinkMode.Off, forceJsonFormat = true, maxOutputTokens = 0 },
-                new ModelConfig { modelName = "gemma4:e4b", thinkMode = ThinkMode.Low, forceJsonFormat = true, maxOutputTokens = 4096 },
+                new ModelConfig { modelName = "gemma3:12b", thinkMode = ThinkMode.ModelDefault, forceJsonFormat = true, maxOutputTokens = 0, contextSize = 32768 },
                 new ModelConfig { modelName = "qwen3:8b", thinkMode = ThinkMode.Off, forceJsonFormat = false, maxOutputTokens = 0 }
             };
             Debug.Log("[BenchmarkRunner] Models reset to defaults");

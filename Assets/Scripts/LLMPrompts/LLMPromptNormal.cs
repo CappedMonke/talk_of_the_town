@@ -41,7 +41,7 @@ PRIORITY ORDER (follow this strictly):
 2. FARMING: If a Farm exists AND Seeds >= 10 AND food is not nearly full, assign at least one villager as Farmer. EXCEPTIONS:
    - If inventory shows ""FARMING BLOCKED"" or ""NEARLY FULL"" for food — do NOT assign more Farmers.
    - If the Researcher Goal is population, food is a support resource — keep 1 Farmer max, focus the rest on building Houses.
-3. BUILDING: Builders place AND construct buildings from scratch — no pre-existing foundation needed. Always specify ""buildingType"":
+3. BUILDING: Builders place AND construct buildings from scratch — no pre-existing foundation needed. Always specify ""buildingType"". IMPORTANT: Use coordinates from the FREE BUILD SITES list — NEVER use coordinates where a building already exists!
    - House: build when free slots = 0 and more villagers are needed. Requires food — ensure food supply exists first!
    - Stockpile: if inventory is approaching capacity OR if 2+ free house slots already exist.
    - Farm: build if no farms exist (farmers are blocked without one), OR if food is genuinely low AND field capacity is the bottleneck.
