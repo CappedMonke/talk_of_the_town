@@ -23,6 +23,7 @@ namespace Benchmark
     {
         public string modelName;
         public ThinkMode thinkMode = ThinkMode.ModelDefault;
+        public PromptStyle promptStyle = PromptStyle.Normal;
         public bool forceJsonFormat = false;
         [Tooltip("0 = Ollama default. Reasoning models need 2048+ to leave room for thinking + output.")]
         public int maxOutputTokens = 0;
@@ -74,6 +75,7 @@ namespace Benchmark
         public string runId;
         public string modelName;
         public string thinkMode;     // ThinkMode to apply for this model
+        public string promptStyle;   // PromptStyle to apply for this run
         public bool forceJsonFormat; // Force JSON structured output via Ollama
         public int maxOutputTokens;  // num_predict for this model
         public int contextSize;      // num_ctx override (0 = model default)
@@ -208,7 +210,7 @@ namespace Benchmark
         public int memoryPairs;
         public string thinkMode;
         public int contextSize;
-        public bool useCavemanPrompt;
+        public string promptStyle;
     }
 
     [Serializable]

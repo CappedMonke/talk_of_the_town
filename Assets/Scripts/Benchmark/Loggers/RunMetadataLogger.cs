@@ -111,7 +111,7 @@ namespace Benchmark.Loggers
                     memoryPairs = llm.MemoryPairs,
                     thinkMode = llm.CurrentThinkMode.ToString(),
                     contextSize = llm.ContextSize,
-                    useCavemanPrompt = GlobalSettings.Instance != null && GlobalSettings.Instance.UseCavemanPrompt
+                    promptStyle = GlobalSettings.Instance != null ? GlobalSettings.Instance.PromptStyle.ToString() : "Normal"
                 };
             }
 

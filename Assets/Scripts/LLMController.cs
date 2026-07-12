@@ -452,10 +452,15 @@ public class LLMController : MonoBehaviour
     {
         var energyRates = GetEnergyRates();
         var buildingCosts = GetBuildingCostsString();
-        bool caveman = GlobalSettings.Instance != null && GlobalSettings.Instance.UseCavemanPrompt;
-        string prompt = caveman
-            ? LLMPromptCaveman.BuildBatchSystemPrompt(availableJobs, villagerCount, energyRates)
-            : LLMPromptNormal.BuildBatchSystemPrompt(availableJobs, villagerCount, energyRates, buildingCosts);
+        var style = GlobalSettings.Instance != null ? GlobalSettings.Instance.PromptStyle : PromptStyle.Normal;
+        string prompt = style switch
+        {
+            PromptStyle.Caveman    => LLMPromptCaveman.BuildBatchSystemPrompt(availableJobs, villagerCount, energyRates, buildingCosts),
+            PromptStyle.Lean       => LLMPromptLean.BuildBatchSystemPrompt(availableJobs, villagerCount, energyRates, buildingCosts),
+            PromptStyle.CavemanOld => LLMPromptCavemanOld.BuildBatchSystemPrompt(availableJobs, villagerCount, energyRates),
+            PromptStyle.NormalOld  => LLMPromptNormalOld.BuildBatchSystemPrompt(availableJobs, villagerCount, energyRates, buildingCosts),
+            _                      => LLMPromptNormal.BuildBatchSystemPrompt(availableJobs, villagerCount, energyRates, buildingCosts),
+        };
 
         // Inject reasoning level directive for models that read it from the system prompt (e.g. gpt-oss)
         if (thinkMode != ThinkMode.ModelDefault)
@@ -1370,10 +1375,15 @@ public class LLMController : MonoBehaviour
 
     private string BuildSingleSystemPrompt(List<string> availableJobs)
     {
-        bool caveman = GlobalSettings.Instance != null && GlobalSettings.Instance.UseCavemanPrompt;
-        return caveman
-            ? LLMPromptCaveman.BuildSingleSystemPrompt(availableJobs)
-            : LLMPromptNormal.BuildSingleSystemPrompt(availableJobs);
+        var style = GlobalSettings.Instance != null ? GlobalSettings.Instance.PromptStyle : PromptStyle.Normal;
+        return style switch
+        {
+            PromptStyle.Caveman    => LLMPromptCaveman.BuildSingleSystemPrompt(availableJobs),
+            PromptStyle.Lean       => LLMPromptLean.BuildSingleSystemPrompt(availableJobs),
+            PromptStyle.CavemanOld => LLMPromptCavemanOld.BuildSingleSystemPrompt(availableJobs),
+            PromptStyle.NormalOld  => LLMPromptNormalOld.BuildSingleSystemPrompt(availableJobs),
+            _                      => LLMPromptNormal.BuildSingleSystemPrompt(availableJobs),
+        };
     }
 
     private string BuildSingleContext(Villager targetVillager)

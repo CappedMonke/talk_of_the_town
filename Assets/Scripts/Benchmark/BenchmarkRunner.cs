@@ -382,6 +382,7 @@ namespace Benchmark
                     runId = $"test_{SanitizeModelName(mc.modelName)}_{preset.label}_{mapSizeLabels[mapIdx]}_rep1",
                     modelName = mc.modelName,
                     thinkMode = mc.thinkMode.ToString(),
+                    promptStyle = mc.promptStyle.ToString(),
                     forceJsonFormat = mc.forceJsonFormat,
                     maxOutputTokens = mc.maxOutputTokens,
                     contextSize = mc.contextSize,
@@ -411,6 +412,7 @@ namespace Benchmark
                                 runId = $"{sanitizedModel}_{preset.label}_{mapSizeLabels[mapIdx]}_rep{rep}",
                                 modelName = mc.modelName,
                                 thinkMode = mc.thinkMode.ToString(),
+                                promptStyle = mc.promptStyle.ToString(),
                                 forceJsonFormat = mc.forceJsonFormat,
                                 maxOutputTokens = mc.maxOutputTokens,
                                 contextSize = mc.contextSize,
@@ -507,7 +509,11 @@ namespace Benchmark
 
             // Configure model and think mode
             if (GlobalSettings.Instance != null)
+            {
                 GlobalSettings.Instance.LLMModel = _currentRun.modelName;
+                if (Enum.TryParse<PromptStyle>(_currentRun.promptStyle, out var ps))
+                    GlobalSettings.Instance.PromptStyle = ps;
+            }
 
             if (LLMController.Instance != null)
             {
@@ -516,7 +522,7 @@ namespace Benchmark
                 LLMController.Instance.ForceJsonFormat = _currentRun.forceJsonFormat;
                 LLMController.Instance.MaxOutputTokens = _currentRun.maxOutputTokens;
                 LLMController.Instance.ContextSize = _currentRun.contextSize;
-                Debug.Log($"[BenchmarkRunner] Config applied: model={_currentRun.modelName}, think={_currentRun.thinkMode}, jsonFormat={_currentRun.forceJsonFormat}, maxTokens={_currentRun.maxOutputTokens}, ctx={_currentRun.contextSize}");
+                Debug.Log($"[BenchmarkRunner] Config applied: model={_currentRun.modelName}, prompt={_currentRun.promptStyle}, think={_currentRun.thinkMode}, jsonFormat={_currentRun.forceJsonFormat}, maxTokens={_currentRun.maxOutputTokens}, ctx={_currentRun.contextSize}");
             }
             else
             {

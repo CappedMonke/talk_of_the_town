@@ -12,7 +12,7 @@ public class GlobalSettings : MonoBehaviour
         set { logLevel = value; GameLog.GlobalLevel = value; }
     }
     [SerializeField] private string llmModel = "";
-    [SerializeField] private bool useCavemanPrompt = false;
+    [SerializeField] private PromptStyle promptStyle = PromptStyle.Normal;
 
     public string LLMModel
     {
@@ -20,10 +20,17 @@ public class GlobalSettings : MonoBehaviour
         set => llmModel = value;
     }
 
+    public PromptStyle PromptStyle
+    {
+        get => promptStyle;
+        set => promptStyle = value;
+    }
+
+    /// <summary>Kept for backward compatibility with UI toggle. Maps Caveman ↔ Normal.</summary>
     public bool UseCavemanPrompt
     {
-        get => useCavemanPrompt;
-        set => useCavemanPrompt = value;
+        get => promptStyle == PromptStyle.Caveman;
+        set => promptStyle = value ? PromptStyle.Caveman : PromptStyle.Normal;
     }
 
     void Awake()
@@ -43,4 +50,13 @@ public class GlobalSettings : MonoBehaviour
     {
         GameLog.GlobalLevel = logLevel;
     }
+}
+
+public enum PromptStyle
+{
+    Normal,
+    Lean,
+    Caveman,
+    NormalOld,
+    CavemanOld
 }
