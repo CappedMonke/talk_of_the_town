@@ -560,7 +560,23 @@ public class LLMController : MonoBehaviour
                 || d.jobStatus.Contains("Looking");
             string tag = isStuck ? "[NEEDS ASSIGNMENT]" : "[KEEP]";
             string energyTag = d.energy < 5 ? " [EXHAUSTED — must rest!]" : d.energy < 30 ? $" [TIRED — working at {d.energy}% speed]" : "";
-            sb.AppendLine($"- {d.name} {tag}: at ({d.x},{d.y}), Job={d.currentJob}, Status=\"{d.jobStatus}\", Energy={d.energy}%{energyTag}");
+
+            // Add explicit error feedback when the last assignment failed
+            string errorTag = "";
+            if (d.jobStatus.Contains("already completed"))
+                errorTag = " !! PREVIOUS ASSIGNMENT FAILED: building at that location is already finished. Assign a DIFFERENT location or job !!";
+            else if (d.jobStatus.Contains("Waiting for resources"))
+                errorTag = " !! PREVIOUS ASSIGNMENT FAILED: not enough resources to build. Gather resources first !!";
+            else if (d.jobStatus.Contains("No farm"))
+                errorTag = " !! PREVIOUS ASSIGNMENT FAILED: no completed Farm exists. Build a Farm first !!";
+            else if (d.jobStatus.Contains("field cap") || d.jobStatus.Contains("Field limit"))
+                errorTag = " !! PREVIOUS ASSIGNMENT FAILED: field capacity reached. Build another Farm or assign a different job !!";
+            else if (d.jobStatus.Contains("Failed to place"))
+                errorTag = " !! LAST BUILD FAILED: tile occupied or invalid. Pick a DIFFERENT FREE BUILD SITE !!";
+            else if (d.jobStatus.Contains("No building tasks"))
+                errorTag = " !! BUILDER HAS NOTHING TO DO: no valid build site found. Reassign to a different job !!";
+
+            sb.AppendLine($"- {d.name} {tag}: at ({d.x},{d.y}), Job={d.currentJob}, Status=\"{d.jobStatus}\", Energy={d.energy}%{energyTag}{errorTag}");
         }
         sb.AppendLine();
 
@@ -882,7 +898,8 @@ public class LLMController : MonoBehaviour
                 || d.jobStatus.Contains("No ")
                 || d.jobStatus.Contains("not found")
                 || d.jobStatus.Contains("Looking")
-                || d.jobStatus.Contains("already completed");
+                || d.jobStatus.Contains("already completed")
+                || d.jobStatus.Contains("Failed");
             string tag = isStuck ? "[NEEDS ASSIGNMENT]" : "[KEEP]";
             string previousJob = _lastAssignedJob.TryGetValue(d.name, out var prev) && prev != d.currentJob
                 ? $", was {prev}"
@@ -899,6 +916,10 @@ public class LLMController : MonoBehaviour
                 errorTag = " !! PREVIOUS ASSIGNMENT FAILED: no completed Farm exists. Build a Farm first !!";
             else if (d.jobStatus.Contains("field cap") || d.jobStatus.Contains("Field limit"))
                 errorTag = " !! PREVIOUS ASSIGNMENT FAILED: field capacity reached. Build another Farm or assign a different job !!";
+            else if (d.jobStatus.Contains("Failed to place"))
+                errorTag = " !! LAST BUILD FAILED: tile occupied or invalid. Pick a DIFFERENT FREE BUILD SITE !!";
+            else if (d.jobStatus.Contains("No building tasks"))
+                errorTag = " !! BUILDER HAS NOTHING TO DO: no valid build site found. Reassign to a different job !!";
 
             sb.AppendLine($"- {d.name} {tag}: {d.currentJob} at ({d.x},{d.y}){previousJob}, Status=\"{d.jobStatus}\", Energy={d.energy}%{energyTag}{errorTag}");
         }
@@ -1110,6 +1131,26 @@ public class LLMController : MonoBehaviour
                     inputState.completedBuildings.Add($"{b.buildingData.buildingType} {pos}");
                 else
                     inputState.unfinishedBuildings.Add($"{b.buildingData.buildingType} {pos} ({b.GetProgressPercent()}%)");
+            }
+
+            // Collect free build sites for diagnostics
+            if (vs?.TileGrid != null)
+            {
+                var core = vs.GetVillageCore();
+                var freeTiles = vs.TileGrid.FindTilesInRadius(core, 5, t =>
+                    t.Archetype != null
+                    && t.Archetype.Style == Tiles.TileStyle.Grass
+                    && !t.HasBuilding
+                    && !t.HasResource);
+                freeTiles.Sort((a, b2) =>
+                {
+                    float da = Vector2Int.Distance(a.GridPos, core);
+                    float db = Vector2Int.Distance(b2.GridPos, core);
+                    return da.CompareTo(db);
+                });
+                int siteCount = Mathf.Min(freeTiles.Count, 6);
+                for (int i = 0; i < siteCount; i++)
+                    inputState.freeBuildSites.Add($"({freeTiles[i].GridPos.x},{freeTiles[i].GridPos.y})");
             }
 
             OnBatchDecisionLogged.Invoke(new BatchDecisionLog

@@ -112,6 +112,7 @@ namespace Benchmark
         public int buildingCount;
         public List<string> completedBuildings = new();
         public List<string> unfinishedBuildings = new();
+        public List<string> freeBuildSites = new();
     }
 
     [Serializable]

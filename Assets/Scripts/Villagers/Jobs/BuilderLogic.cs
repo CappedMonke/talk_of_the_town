@@ -156,12 +156,17 @@ public class BuilderLogic : JobLogic
                 }
             }
 
+            var placementTile = _targetTile;
             _currentTarget = PlaceFoundation(_targetTile, buildingData);
             _targetTile = null;
 
             if (_currentTarget == null)
             {
-                currentStatus = "Failed to place foundation. Waiting...";
+                string tilePos = placementTile != null ? placementTile.GridPos.ToString() : "unknown";
+                string typeName = buildingData != null ? buildingData.buildingType.ToString() : "building";
+                currentStatus = $"Failed to place {typeName} at ({tilePos}). Waiting...";
+                LLMController.Instance?.AddRecentEvent(
+                    $"Build FAILED: {typeName} at ({tilePos}) — tile occupied or invalid. Pick a different FREE BUILD SITE.");
                 ChangeState(AnimationState.Idle, handler);
                 return;
             }
@@ -237,6 +242,11 @@ public class BuilderLogic : JobLogic
             }
             return;
         }
+
+        // Don't self-retry if placement failed — wait for LLM to reassign with a
+        // different coordinate. Retrying the same target is pointless.
+        if (currentStatus != null && currentStatus.Contains("Failed to place"))
+            return;
 
         if (timeSinceLastAction >= 1f)
             ChangeState(AnimationState.FindingTarget, handler);

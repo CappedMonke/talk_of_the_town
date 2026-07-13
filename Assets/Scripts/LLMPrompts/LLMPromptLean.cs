@@ -63,6 +63,7 @@ Decide each villager top-down. The FIRST rule that matches wins — do not keep 
 - One villager per coordinate. Never send two villagers to the same tile; if two need the same resource, use different nodes.
 - Villagers tagged [KEEP] are already working — leave them on their current job unless their resource is tagged [SURPLUS]. Only freely reassign villagers tagged [NEEDS ASSIGNMENT]. Never swap two villagers' jobs without a specific reason.
 - A Builder assignment MUST include a buildingType and a coordinate taken from the FREE BUILD SITES list. Never build on an occupied tile.
+- If a previous Builder assignment failed (see error tags), NEVER re-issue the same coordinate. Choose a different FREE BUILD SITE.
 - Use ONLY coordinates that appear in the live context lists.
 
 gatherAmount: on any Lumberjack/Miner/SeedGatherer/Farmer, set it to the exact units needed so the villager stops and frees up instead of overfilling storage. Omit only for intentional indefinite gathering.

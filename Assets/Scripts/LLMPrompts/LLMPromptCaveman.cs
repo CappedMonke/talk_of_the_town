@@ -53,6 +53,7 @@ CONSTRAINTS:
 - 1 villager/coord. never 2 same tile. same resource->diff nodes
 - [KEEP]=stay unless resource [SURPLUS]. only reassign [NEEDS ASSIGNMENT]. no job swaps w/o reason
 - Builder needs buildingType + FREE BUILD SITE coord. never on occupied tile
+- failed build coord -> never reuse. pick different FREE BUILD SITE
 - only coords from live context lists
 
 gatherAmount: set exact units so villager stops+frees up (no overfill). omit=indefinite.
